@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 
-from ._run_model import MARKER
+from ._run_model import MARKER, SAVE_GEOMETRY_ENV
 
 TAIL_LINES = 40
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -30,12 +30,15 @@ def _important_lines(lines):
     return [line for line in lines if any(k in line.lower() for k in keys)][:40]
 
 
-def generate_model(script_path, timeout_s=1800):
+def generate_model(script_path, timeout_s=1800, save_geometry=False):
     script_path = os.path.abspath(script_path)
     if not os.path.isfile(script_path):
         raise FileNotFoundError(script_path)
 
     env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1", MPLBACKEND="Agg")
+    env.pop(SAVE_GEOMETRY_ENV, None)
+    if save_geometry:
+        env[SAVE_GEOMETRY_ENV] = "1"
     try:
         proc = subprocess.run([sys.executable, "-u", "-m", "gds2palace_mcp._run_model", script_path],
                               cwd=os.path.dirname(script_path), env=env, stdin=subprocess.DEVNULL,
@@ -78,6 +81,9 @@ def generate_model(script_path, timeout_s=1800):
                 pass
         else:
             files[f"{basename}.msh"] = False
+        geometry = os.path.join(sim_path, f"{basename}.geo_unrolled")
+        if os.path.isfile(geometry):
+            entry["geometry_file"] = geometry
         result["models"].append(entry)
 
     complete = bool(models) and all(all(m["files"].values()) for m in result["models"])

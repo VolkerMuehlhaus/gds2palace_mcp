@@ -13,6 +13,7 @@ from .layout import inspect_gds as _inspect_gds
 from .model_run import generate_model as _generate_model
 from .settings_check import check_model_script as _check_model_script
 from .stackup import inspect_stackup as _inspect_stackup, list_stackups as _list_stackups
+from .viewers import show_in_gmsh as _show_in_gmsh
 
 AGENTS_URL = "https://raw.githubusercontent.com/VolkerMuehlhaus/gds2palace_ihp_sg13g2/main/AGENTS.md"
 
@@ -23,8 +24,8 @@ layout and an XML stackup file.
 Workflow: read the resource gds2palace://agents-guide first (how model scripts are written,
 settings, ports, pitfalls). Inspect the inputs with list_stackups, inspect_stackup and
 inspect_gds. Write the model script, starting from the template in the guide. Run
-check_model_script, fix what it reports, then generate_model. The Palace solver runs on Linux
-and is not started by these tools.
+check_model_script, fix what it reports, then generate_model. show_in_gmsh opens the model in a
+gmsh window for the user. The Palace solver runs on Linux and is not started by these tools.
 
 Ask the user for design intent (frequency range, ports, stackup, accuracy versus run time);
 don't invent it. All paths are on the machine where this server runs.
@@ -89,11 +90,25 @@ def check_model_script(script_path: str) -> dict:
 
 @mcp.tool()
 @expected_errors
-def generate_model(script_path: str, timeout_s: int = 1800) -> dict:
+def generate_model(script_path: str, timeout_s: int = 1800, save_geometry: bool = False) -> dict:
     """Run a gds2palace model script (python model.py) without gmsh windows and check its output:
     config.json, mesh, port_information.json and run_sim in palace_model/<model>_data, with mesh
-    node/element counts. Meshing large layouts can take minutes. Does not run the Palace solver."""
-    return _generate_model(script_path, timeout_s)
+    node/element counts. Meshing large layouts can take minutes. Does not run the Palace solver.
+
+    save_geometry: also save the unmeshed geometry (<model>.geo_unrolled) for show_in_gmsh."""
+    return _generate_model(script_path, timeout_s, save_geometry)
+
+
+@mcp.tool()
+@expected_errors
+def show_in_gmsh(path: str, what: str = "mesh") -> dict:
+    """Open the model in the gmsh GUI on the user's screen, so that they can look at it. Returns at
+    once; the window stays open. You (the assistant) don't see the window: ask the user.
+
+    path: the model script, its palace_model/<model>_data folder, or a .msh / .geo_unrolled file.
+    what: "mesh" (the meshed model) or "geometry" (the unmeshed geometry, which needs
+    generate_model with save_geometry=True first)."""
+    return _show_in_gmsh(path, what)
 
 
 def _agents_guide():

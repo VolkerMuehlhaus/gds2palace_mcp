@@ -5,8 +5,9 @@ Usage: python -u -m gds2palace_mcp._run_model <script.py>
 The script runs as __main__ with its own sys.path, so it uses whichever
 gds2palace it imports (installed package or a local copy). An import hook
 wraps simulation_setup.create_model() when that module is loaded: it forces
-settings['no_gui'] = True and prints one marker line with the output paths
-for generate_model to read.
+settings['no_gui'] = True (and settings['save_gmsh_unrolled'] = True if the
+environment variable GDS2PALACE_MCP_SAVE_GEOMETRY is set) and prints one
+marker line with the output paths for generate_model to read.
 """
 
 import importlib.abc
@@ -18,6 +19,7 @@ import sys
 
 TARGET = "gds2palace.util_simulation_setup"
 MARKER = "GDS2PALACE_MCP_RESULT "
+SAVE_GEOMETRY_ENV = "GDS2PALACE_MCP_SAVE_GEOMETRY"
 
 
 def _patch(module):
@@ -25,6 +27,8 @@ def _patch(module):
 
     def create_model(excite_ports, settings):
         settings["no_gui"] = True
+        if os.environ.get(SAVE_GEOMETRY_ENV):
+            settings["save_gmsh_unrolled"] = True
         result = original(excite_ports, settings)
         package = sys.modules.get("gds2palace")
         print(MARKER + json.dumps({

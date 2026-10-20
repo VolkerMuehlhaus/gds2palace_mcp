@@ -24,6 +24,40 @@ Three things are useful to know:
 - **The assistant can still make mistakes.** The tools give it facts from your files instead of guesses, but you
   remain the designer. Check the model before you trust the results.
 
+## Where your data goes
+
+Your files stay on your computer. Facts taken from them don't.
+
+The server reads and writes your GDSII file, the mesh and the Palace input files on your own disk. It never uploads
+them, and no tool returns polygon coordinates or mesh contents. But the assistant runs in the cloud, so everything a
+tool **returns** goes to it as part of the conversation:
+
+| Tool | What the assistant receives |
+|---|---|
+| `inspect_gds` | File path, cell name, the layer numbers used, shape count per layer, bounding boxes, smallest shape side and smallest gap per layer |
+| `inspect_stackup`, `list_stackups` | The stackup contents: layer heights, materials, conductivities. For the IHP stackups that ship with gds2palace, this is public data |
+| `check_model_script` | The setting values in the script (frequencies, mesh sizes, ...) |
+| `generate_model` | File paths, log lines from gds2palace and gmsh, mesh size |
+| `show_in_gmsh` | Only the file path. The gmsh window is shown on your screen; the assistant doesn't see it |
+
+Together this is a coarse fingerprint of a design (size, layers, smallest features), not the design itself.
+
+Two things outside these tools also send data:
+
+- **The assistant's own file access.** Claude Code can read files by itself. A model script that it writes or edits
+  is sent in full, and so is any file you ask it to look at. To make sure it never reads layouts or meshes, add deny
+  rules to your Claude Code settings (`.claude/settings.json`):
+
+  ```json
+  { "permissions": { "deny": ["Read(**/*.gds)", "Read(**/*.gds2)", "Read(**/*.oas)", "Read(**/*.msh)"] } }
+  ```
+
+- **The guide download.** If gds2palace is installed without its repository, the server downloads the gds2palace
+  guide (AGENTS.md) from GitHub. This request sends nothing about your design.
+
+How long conversations are kept, and whether they may be used for training, depends on your Claude plan and its data
+settings. Check them before you work on confidential designs.
+
 ## What you can do with it
 
 The gds2palace workflow needs three inputs: a GDSII layout, an XML stackup file and a Python model script. The
@@ -37,6 +71,7 @@ server helps with all three and then builds the model.
 | "Write a model script for it" | (writes the file) | A gds2palace script, based on the official template |
 | "Check my script" | `check_model_script` | Typos in setting names, missing settings, port layers that are not read, outdated settings |
 | "Generate the model" | `generate_model` | The Palace input files (`config.json`, mesh, `run_sim`), the mesh size, and the warnings from meshing |
+| "Show me the mesh" | `show_in_gmsh` | The meshed model, or the geometry before meshing, in a gmsh window on your screen |
 
 Some things this helps with in practice:
 
@@ -63,8 +98,10 @@ are and what they connect, port impedance, which stackup, and how much accuracy 
   version. Use plot_snp or setupEM for now.
 - **It doesn't edit your layout.** Ports are polygons on extra GDS layers (201, 202, ...). You draw them in KLayout,
   or you ask the assistant to write a small Python script that adds them.
-- **It doesn't show the 3D model.** gmsh windows are switched off so that the run doesn't stop and wait. To look at
-  the geometry, run your script yourself (`python model.py`), or use setupEM.
+- **The assistant can't see the 3D model.** Ask "show me the mesh" (or "the geometry before meshing"), and the
+  `show_in_gmsh` tool opens it in a gmsh window on your screen. The assistant only knows that the window opened, so
+  tell it what you see. During model generation, gmsh windows are switched off so that the run doesn't stop and
+  wait.
 - **It doesn't know your design intent.** It can tell you that the smallest gap is 2 µm. It can't know if you care
   about 60 GHz or 160 GHz, or which pads are the ports.
 - **It doesn't guarantee correct results.** A model that meshes without errors can still be wrong (wrong stackup,
