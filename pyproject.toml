@@ -24,6 +24,10 @@ dependencies = [
     "numpy",
 ]
 
+[project.urls]
+Homepage = "https://github.com/VolkerMuehlhaus/gds2palace_mcp"
+Documentation = "https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md"
+
 [project.scripts]
 gds2palace_mcp = "gds2palace_mcp.server:main"
 

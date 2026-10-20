@@ -41,7 +41,7 @@ For Claude Desktop and other clients, add the same command to the client's MCP s
 | `check_model_script` | Checks a model script without running it: settings that gds2palace doesn't read (typos such as `nogui` are silently ignored by gds2palace), missing required settings, port layers missing from the layer list, removed or legacy settings |
 | `generate_model` | Runs the model script without gmsh windows and checks the output: `config.json`, mesh with node and element counts, `port_information.json`, `run_sim`. With `save_geometry`, it also saves the unmeshed geometry |
 | `show_in_gmsh` | Opens the mesh, or the unmeshed geometry, in the gmsh GUI on the user's screen |
-| `preview_layout` | The layout as an image (IHP SG13G2 colors, via [gds_viewer](https://github.com/volkermuehlhaus-claude/gds_viewer)) with the ports labelled, for the assistant to look at |
+| `preview_layout` | The layout as an image (IHP SG13G2 colors, via [gds_viewer](https://github.com/VolkerMuehlhaus/gds_viewer)) with the ports labelled, for the assistant to look at |
 | `sparameter_summary` | Numbers from Touchstone files: ports, frequency range, passivity and reciprocity, dB minimum/maximum, dB/phase at chosen frequencies |
 | `plot_sparameters` | dB/phase plots and Smith charts as images for the assistant (via [plot_snp](https://github.com/VolkerMuehlhaus/plot_snp)), several files in one plot |
 | `show_sparameters` | Opens the interactive plot_snp windows on the user's screen |
@@ -54,8 +54,8 @@ README).
 Prompt: `new_model` starts a new model: it inspects the layout and asks you for the design decisions (frequency
 range, ports, stackup, accuracy) before writing the script.
 
-New to MCP? [docs/README.md](docs/README.md) explains what this can and can't do for an RFIC designer, and
-[docs/example_session.md](docs/example_session.md) shows a full session with an inductor.
+New to MCP? [docs/README.md](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md) explains what this can and can't do for an RFIC designer, and
+[docs/example_session.md](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/example_session.md) shows a full session with an inductor.
 
 ## Notes
 
