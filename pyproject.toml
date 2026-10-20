@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gds2palace_mcp"
+dynamic = ["version"]
+description = "MCP server for gds2palace: inspect GDSII layouts and stackups, check and generate AWS Palace models"
+authors = [
+    { name = "Volker Muehlhaus", email = "volker@muehlhaus.com" }
+]
+license = "GPL-3.0-or-later"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=2.3,<3",
+    "gds2palace>=0.9.1",
+    "gdspy>1.6.0",
+    "shapely>=2.0",
+    "numpy",
+]
+
+[project.scripts]
+gds2palace_mcp = "gds2palace_mcp.server:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "gds2palace_mcp.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
