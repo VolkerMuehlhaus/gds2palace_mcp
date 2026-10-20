@@ -1,11 +1,13 @@
 """gds2palace MCP server (stdio)."""
 
 import functools
+import json
 import os
 import urllib.request
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ResourceError, ResourceNotFoundError, ToolError
+from mcp.server.mcpserver.utilities.types import Image
 
 from . import __version__
 from .common import Gds2palaceError
@@ -13,7 +15,7 @@ from .layout import inspect_gds as _inspect_gds
 from .model_run import generate_model as _generate_model
 from .settings_check import check_model_script as _check_model_script
 from .stackup import inspect_stackup as _inspect_stackup, list_stackups as _list_stackups
-from .viewers import show_in_gmsh as _show_in_gmsh
+from .viewers import preview_layout as _preview_layout, show_in_gmsh as _show_in_gmsh
 
 AGENTS_URL = "https://raw.githubusercontent.com/VolkerMuehlhaus/gds2palace_ihp_sg13g2/main/AGENTS.md"
 
@@ -24,8 +26,8 @@ layout and an XML stackup file.
 Workflow: read the resource gds2palace://agents-guide first (how model scripts are written,
 settings, ports, pitfalls). Inspect the inputs with list_stackups, inspect_stackup and
 inspect_gds. Write the model script, starting from the template in the guide. Run
-check_model_script, fix what it reports, then generate_model. show_in_gmsh opens the model in a
-gmsh window for the user. The Palace solver runs on Linux and is not started by these tools.
+check_model_script, fix what it reports, then generate_model. preview_layout shows you the layout
+as an image with ports labelled; show_in_gmsh opens the model in a gmsh window for the user. The Palace solver runs on Linux and is not started by these tools.
 
 Ask the user for design intent (frequency range, ports, stackup, accuracy versus run time);
 don't invent it. All paths are on the machine where this server runs.
@@ -109,6 +111,29 @@ def show_in_gmsh(path: str, what: str = "mesh") -> dict:
     what: "mesh" (the meshed model) or "geometry" (the unmeshed geometry, which needs
     generate_model with save_geometry=True first)."""
     return _show_in_gmsh(path, what)
+
+
+@mcp.tool()
+@expected_errors
+def preview_layout(gds_file: str, cellname: str = "", ports: dict[int, int] | None = None,
+                   width_px: int = 1000, send_image: bool = True, save_png: str = "") -> list:
+    """Render the layout as a PNG with IHP SG13G2 colors and fill patterns, with ports labelled,
+    so that you can see it: check port positions against the feed lines, see the structure type.
+
+    The image is sent to the assistant, i.e. a picture of the user's design leaves their machine.
+    For confidential layouts, use send_image=False with save_png: the PNG is then only saved
+    locally for the user to open.
+
+    ports: {port number: GDS layer}, e.g. {1: 201, 2: 202}; each shape on that layer is labelled
+    P<n>. Without ports, shapes on layers 201-249 are labelled L<layer>. Layers without SG13G2
+    style (ports, SUBGND, ...) are drawn as outlines.
+    width_px: image width; 1000 is enough for an overview, larger for small details.
+    save_png: optional path to also save the PNG."""
+    if not send_image and not save_png:
+        raise ValueError("send_image=False needs save_png, otherwise nothing is produced.")
+    png, summary = _preview_layout(gds_file, cellname, ports, width_px, save_png)
+    text = json.dumps(summary, indent=1)
+    return [Image(data=png, format="png"), text] if send_image else [text]
 
 
 def _agents_guide():

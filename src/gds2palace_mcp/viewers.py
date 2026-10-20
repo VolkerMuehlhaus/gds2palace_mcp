@@ -63,3 +63,60 @@ def show_in_gmsh(path, what="mesh"):
                 + ("Large file: loading takes a moment. " if size_mb > 50 else "")
                 + "This tool does not see the window; ask the user what they see.",
     }
+
+
+def preview_layout(gds_file, cellname="", ports=None, width_px=1000, save_png=""):
+    """Render the layout to PNG bytes with gds_viewer (IHP SG13G2 colors), ports labelled.
+
+    ports: {port number: GDS layer}; each shape on that layer gets the label P<n> at its
+    center. Without ports, shapes on the conventional port layers 201-249 are labelled
+    L<layer>. Layers without SG13G2 style (ports, SUBGND, ...) are drawn as outlines.
+    Returns (png bytes, summary dict).
+    """
+    import io
+
+    import gdspy
+    import gds_viewer
+
+    from .layout import _select_cell
+
+    gds_file = os.path.abspath(gds_file)
+    cell, note = _select_cell(gdspy.GdsLibrary(infile=gds_file), cellname)
+    by_spec = cell.get_polygons(by_spec=True)
+    drawn_layers = {int(layer) for (layer, _), polygons in by_spec.items() if polygons}
+
+    if ports:
+        label_layers = {int(layer): f"P{number}" for number, layer in ports.items()}
+    else:
+        label_layers = {layer: f"L{layer}" for layer in drawn_layers if 201 <= layer <= 249}
+
+    labels, missing = [], []
+    for layer, text in sorted(label_layers.items()):
+        shapes = [p for (l, _), polygons in by_spec.items() if l == layer for p in polygons]
+        if not shapes:
+            missing.append(f"{text}: no shapes on layer {layer}")
+        for points in shapes:
+            x, y = (points.min(axis=0) + points.max(axis=0)) / 2
+            labels.append((float(x), float(y), text))
+
+    styled = {layer for layer, _ in gds_viewer.LAYER_STYLES}
+    outline = {layer for layer in drawn_layers if layer not in styled}
+
+    buffer = io.BytesIO()
+    gds_viewer.render_screenshot(cell, buffer, width_px=width_px, labels=labels, outline_layers=outline)
+    png = buffer.getvalue()
+    if save_png:
+        save_png = os.path.abspath(save_png)
+        with open(save_png, "wb") as f:
+            f.write(png)
+
+    (x0, y0), (x1, y1) = cell.get_bounding_box()
+    summary = {
+        "gds_file": gds_file, "cell": cell.name,
+        "bbox": [round(float(v), 4) for v in (x0, y0, x1, y1)],
+        "labels": [{"text": t, "x": round(x, 3), "y": round(y, 3)} for x, y, t in labels],
+        "outline_layers": sorted(outline),
+        "saved_png": save_png or None,
+        "notes": [n for n in [note] + missing if n],
+    }
+    return png, summary

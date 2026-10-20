@@ -15,6 +15,7 @@ requires-python = ">=3.10"
 dependencies = [
     "mcp>=2.3,<3",
     "gds2palace>=0.9.1",
+    "gds_viewer>=0.1.0",
     "gdspy>1.6.0",
     "shapely>=2.0",
     "numpy",
