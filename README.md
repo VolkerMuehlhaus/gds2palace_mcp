@@ -48,6 +48,9 @@ README).
 Prompt: `new_model` starts a new model: it inspects the layout and asks you for the design decisions (frequency
 range, ports, stackup, accuracy) before writing the script.
 
+New to MCP? [docs/README.md](docs/README.md) explains what this can and can't do for an RFIC designer, and
+[docs/example_session.md](docs/example_session.md) shows a full session with an inductor.
+
 ## Notes
 
 - All paths are paths on the computer where the server runs.
