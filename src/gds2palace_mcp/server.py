@@ -14,6 +14,7 @@ from .common import Gds2palaceError
 from .layout import inspect_gds as _inspect_gds
 from .model_run import generate_model as _generate_model
 from .settings_check import check_model_script as _check_model_script
+from . import sparams
 from .stackup import inspect_stackup as _inspect_stackup, list_stackups as _list_stackups
 from .viewers import preview_layout as _preview_layout, show_in_gmsh as _show_in_gmsh
 
@@ -27,7 +28,9 @@ Workflow: read the resource gds2palace://agents-guide first (how model scripts a
 settings, ports, pitfalls). Inspect the inputs with list_stackups, inspect_stackup and
 inspect_gds. Write the model script, starting from the template in the guide. Run
 check_model_script, fix what it reports, then generate_model. preview_layout shows you the layout
-as an image with ports labelled; show_in_gmsh opens the model in a gmsh window for the user. The Palace solver runs on Linux and is not started by these tools.
+as an image with ports labelled; show_in_gmsh opens the model in a gmsh window for the user.
+For results (.sNp files): sparameter_summary and passive_values give numbers, plot_sparameters
+gives you plots, show_sparameters opens plot windows for the user. The Palace solver runs on Linux and is not started by these tools.
 
 Ask the user for design intent (frequency range, ports, stackup, accuracy versus run time);
 don't invent it. All paths are on the machine where this server runs.
@@ -134,6 +137,63 @@ def preview_layout(gds_file: str, cellname: str = "", ports: dict[int, int] | No
     png, summary = _preview_layout(gds_file, cellname, ports, width_px, save_png)
     text = json.dumps(summary, indent=1)
     return [Image(data=png, format="png"), text] if send_image else [text]
+
+
+@mcp.tool()
+@expected_errors
+def sparameter_summary(files: list[str], parameters: list[str] | None = None,
+                       frequencies_ghz: list[float] | None = None) -> dict:
+    """Numbers from Touchstone files (.s1p, .s2p, ... from Palace/combine_snp, other simulators or
+    a VNA): ports, frequency range, reference impedances, passivity and reciprocity checks, and per
+    S-parameter the dB minimum/maximum with frequency, plus dB/phase at the given frequencies.
+
+    parameters: e.g. ["S11", "S21"]; default all Smn with m >= n (up to 4 ports).
+    Prefer this over plots when you need exact values."""
+    return sparams.sparameter_summary(files, parameters, frequencies_ghz)
+
+
+@mcp.tool()
+@expected_errors
+def plot_sparameters(files: list[str], parameters: list[str] | None = None, smith: bool = False,
+                     zoom: bool = False, width_px: int = 1000, send_image: bool = True,
+                     save_png: str = "") -> list:
+    """Plot S-parameters as images for you to look at, with plot_snp: dB and phase per parameter,
+    one curve per file (e.g. simulated vs measured), optionally Smith charts of the reflection
+    parameters (smith; zoom = |Gamma| <= 0.5).
+
+    The images are sent to the assistant. send_image=False with save_png only saves them locally.
+    parameters: default ["S11", "S21"]. For a window on the user's screen, use show_sparameters."""
+    if not send_image and not save_png:
+        raise ValueError("send_image=False needs save_png, otherwise nothing is produced.")
+    images, summary = sparams.plot_sparameters(files, parameters, smith, zoom, width_px, save_png)
+    text = json.dumps(summary, indent=1)
+    return ([Image(data=png, format="png") for png in images] + [text]) if send_image else [text]
+
+
+@mcp.tool()
+@expected_errors
+def show_sparameters(files: list[str], parameters: list[str] | None = None, smith: bool = False,
+                     zoom: bool = False) -> dict:
+    """Open the interactive plot_snp window(s) on the user's screen (zoom, pan, save). Returns at
+    once. You don't see the windows; ask the user. parameters: default S11."""
+    return sparams.show_sparameters(files, parameters, smith, zoom)
+
+
+@mcp.tool()
+@expected_errors
+def passive_values(file: str, device: str = "inductor", connection: str = "differential",
+                   frequencies_ghz: list[float] | None = None, plot: bool = False) -> list:
+    """L (or C), R and Q of an inductor or capacitor from a 1-port or 2-port Touchstone file:
+    low-frequency value, peak Q and its frequency, self-resonance frequency (SRF), and values at the
+    given frequencies.
+
+    device: "inductor" or "capacitor".
+    connection (2-port files): "differential" (Z11-Z12-Z21+Z22, port to port, floating),
+    "single_ended" (1/Y11, port 2 grounded) or "series" (-2/(Y12+Y21), pi-model series branch).
+    Ask the user which one matches how the device is used if it is not clear.
+    plot: also return an image of L/C and Q versus frequency (sent to the assistant)."""
+    result, images = sparams.passive_values(file, device, connection, frequencies_ghz, plot)
+    return [json.dumps(result, indent=1)] + [Image(data=png, format="png") for png in images]
 
 
 def _agents_guide():

@@ -14,8 +14,8 @@ does not run the Palace solver: Palace runs on Linux, as before (`run_sim`, see 
 pip install gds2palace_mcp
 ```
 
-This also installs gds2palace and its requirements (gdspy, gmsh, shapely, numpy). It needs gds2palace 0.9.1 or
-newer, the first version that ships the IHP stackup files.
+This also installs gds2palace and its requirements (gdspy, gmsh, shapely, numpy), gds_viewer, plot_snp and
+scikit-rf. It needs gds2palace 0.9.1 or newer, the first version that ships the IHP stackup files.
 
 Add the server to Claude Code, using the Python environment where it is installed:
 
@@ -41,6 +41,11 @@ For Claude Desktop and other clients, add the same command to the client's MCP s
 | `check_model_script` | Checks a model script without running it: settings that gds2palace doesn't read (typos such as `nogui` are silently ignored by gds2palace), missing required settings, port layers missing from the layer list, removed or legacy settings |
 | `generate_model` | Runs the model script without gmsh windows and checks the output: `config.json`, mesh with node and element counts, `port_information.json`, `run_sim`. With `save_geometry`, it also saves the unmeshed geometry |
 | `show_in_gmsh` | Opens the mesh, or the unmeshed geometry, in the gmsh GUI on the user's screen |
+| `preview_layout` | The layout as an image (IHP SG13G2 colors, via [gds_viewer](https://github.com/volkermuehlhaus-claude/gds_viewer)) with the ports labelled, for the assistant to look at |
+| `sparameter_summary` | Numbers from Touchstone files: ports, frequency range, passivity and reciprocity, dB minimum/maximum, dB/phase at chosen frequencies |
+| `plot_sparameters` | dB/phase plots and Smith charts as images for the assistant (via [plot_snp](https://github.com/VolkerMuehlhaus/plot_snp)), several files in one plot |
+| `show_sparameters` | Opens the interactive plot_snp windows on the user's screen |
+| `passive_values` | L or C, R and Q of an inductor or capacitor (differential, single-ended or series), peak Q, self-resonance frequency, optional L/Q plot |
 
 Resources: `gds2palace://agents-guide` (gds2palace's [AGENTS.md](https://github.com/VolkerMuehlhaus/gds2palace_ihp_sg13g2/blob/main/AGENTS.md):
 workflow, script template, settings, pitfalls) and `gds2palace://stackups/<file>` (the bundled stackup files and their

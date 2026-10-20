@@ -184,10 +184,14 @@ This took 9 seconds. Larger layouts or finer meshes take minutes.
 The Palace run itself is outside this server (see [README.md](README.md#what-it-cant-do)). When the `.s2p` file is
 back, you can continue in the same conversation, for example:
 
-> **You:** Plot L and Q of L2n0_model.s2p up to 50 GHz.
+> **You:** What are L and Q of L2n0_model.s2p, and show me the curves.
 
-The assistant can do this with ordinary Python (scikit-rf and matplotlib, if installed), without an MCP tool. Check
-the result against something you know, for example the PDK model or a measurement of the same inductor. The
+The assistant uses `passive_values` (L, R and Q from the S-parameters, peak Q, self-resonance frequency) with a plot,
+and asks you how the inductor is connected if that is not clear: differential (between port 1 and port 2), or
+single-ended (port 2 to ground). Other requests: "compare S11 of L2n0_model.s2p and measured.s2p" (`plot_sparameters`),
+or "open the plots for me" (`show_sparameters`, windows on your screen).
+
+Check the result against something you know, for example the PDK model or a measurement of the same inductor. The
 gds2palace examples include such a comparison for another inductor (L6n2) in
 `more_examples/measured_vs_simulated/`.
 

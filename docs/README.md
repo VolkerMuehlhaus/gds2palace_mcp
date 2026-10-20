@@ -26,11 +26,11 @@ Three things are useful to know:
 
 ## Where your data goes
 
-Your files stay on your computer. Facts taken from them don't.
+Your files stay on your computer. Facts taken from them, and pictures you ask for, don't.
 
-The server reads and writes your GDSII file, the mesh and the Palace input files on your own disk. It never uploads
-them, and no tool returns polygon coordinates or mesh contents. But the assistant runs in the cloud, so everything a
-tool **returns** goes to it as part of the conversation:
+The server reads and writes your GDSII file, the mesh, the Palace input files and your S-parameter files on your own
+disk. It never uploads them, and no tool returns polygon coordinates or mesh contents. But the assistant runs in the
+cloud, so everything a tool **returns** goes to it as part of the conversation, including images:
 
 | Tool | What the assistant receives |
 |---|---|
@@ -38,9 +38,13 @@ tool **returns** goes to it as part of the conversation:
 | `inspect_stackup`, `list_stackups` | The stackup contents: layer heights, materials, conductivities. For the IHP stackups that ship with gds2palace, this is public data |
 | `check_model_script` | The setting values in the script (frequencies, mesh sizes, ...) |
 | `generate_model` | File paths, log lines from gds2palace and gmsh, mesh size |
-| `show_in_gmsh` | Only the file path. The gmsh window is shown on your screen; the assistant doesn't see it |
+| `show_in_gmsh`, `show_sparameters` | Only the file paths. The windows are shown on your screen; the assistant doesn't see them |
+| `preview_layout` | **A picture of your layout.** This is the one tool that sends the design itself, as an image. For confidential layouts, ask for the picture to be saved locally only ("save the preview as preview.png, don't send it to yourself") |
+| `sparameter_summary`, `passive_values` | Numbers from your S-parameter files: dB values, L, Q, C, resonance frequency |
+| `plot_sparameters`, `passive_values` with plot | Plots of your S-parameters or of L and Q, as images. Like the layout picture, they can be saved locally only |
 
-Together this is a coarse fingerprint of a design (size, layers, smallest features), not the design itself.
+Apart from the layout picture, this is a coarse fingerprint of a design (size, layers, smallest features, performance
+numbers), not the design itself.
 
 Two things outside these tools also send data:
 
@@ -72,6 +76,10 @@ server helps with all three and then builds the model.
 | "Check my script" | `check_model_script` | Typos in setting names, missing settings, port layers that are not read, outdated settings |
 | "Generate the model" | `generate_model` | The Palace input files (`config.json`, mesh, `run_sim`), the mesh size, and the warnings from meshing |
 | "Show me the mesh" | `show_in_gmsh` | The meshed model, or the geometry before meshing, in a gmsh window on your screen |
+| "Look at the layout. Are the ports at the right place?" | `preview_layout` | The assistant sees a picture of the layout with the ports labelled P1, P2, ... |
+| "Show me S11 and S21 of result.s2p" | `show_sparameters` | The plot_snp windows (dB, phase, Smith chart) on your screen |
+| "Compare simulated.s2p with measured.s2p" | `plot_sparameters`, `sparameter_summary` | The assistant sees both curves in one plot, and gets the numbers to compare |
+| "What is L and Q of this inductor?" | `passive_values` | L, R and Q at low frequency and at chosen frequencies, peak Q, self-resonance frequency |
 
 Some things this helps with in practice:
 
@@ -94,8 +102,10 @@ are and what they connect, port impedance, which stackup, and how much accuracy 
 
 - **It doesn't run the Palace solver.** Palace runs on Linux. After `generate_model`, you run `run_sim` on your Linux
   machine (or WSL, or a remote server), as before. A later version may send jobs to a simulation server.
-- **It doesn't evaluate results yet.** Plotting S-parameters and checking a finished Palace run are not part of this
-  version. Use plot_snp or setupEM for now.
+- **It reads results, but doesn't check the Palace run itself.** It works with the Touchstone files (`.s2p`, ...), not
+  with Palace's logs or convergence data. For that, use `palace_summary.py` or setupEM.
+- **It extracts L, Q and C, not full equivalent circuits.** Wideband models with substrate networks are what the
+  lumpedmodel scripts do.
 - **It doesn't edit your layout.** Ports are polygons on extra GDS layers (201, 202, ...). You draw them in KLayout,
   or you ask the assistant to write a small Python script that adds them.
 - **The assistant can't see the 3D model.** Ask "show me the mesh" (or "the geometry before meshing"), and the
