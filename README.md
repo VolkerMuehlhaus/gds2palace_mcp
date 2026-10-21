@@ -1,5 +1,7 @@
 # gds2palace_mcp
 
+![gds2palace_mcp: agent assisted RFIC EM simulation](docs/png/gds2palace_mcp_banner.png)
+
 An [MCP](https://modelcontextprotocol.io) server for
 [gds2palace](https://github.com/VolkerMuehlhaus/gds2palace_ihp_sg13g2). It lets an AI assistant (Claude Code,
 Claude Desktop, or any other MCP client) inspect GDSII layouts and stackup files, check model scripts, and generate
@@ -14,8 +16,8 @@ does not run the Palace solver: Palace runs on Linux, as before (`run_sim`, see 
 pip install gds2palace_mcp
 ```
 
-This also installs gds2palace and its requirements (gdspy, gmsh, shapely, numpy), gds_viewer, plot_snp and
-scikit-rf. It needs gds2palace 0.9.1 or newer, the first version that ships the IHP stackup files.
+This also installs gds2palace and its requirements (gdspy, gmsh, shapely, numpy), gds_prepare_for_EM, gds_viewer,
+plot_snp and scikit-rf. It needs gds2palace 0.9.1 or newer, the first version that ships the IHP stackup files.
 
 Add the server to Claude Code, using the Python environment where it is installed:
 
@@ -38,6 +40,8 @@ For Claude Desktop and other clients, add the same command to the client's MCP s
 | `list_stackups` | The IHP stackup files that ship with gds2palace (SG13G2, SG13G2 with conformal passivation, SG13CMOS5L) |
 | `inspect_stackup` | Variables, materials, dielectrics, layers with GDS numbers and z positions, derived layers, free port layer numbers. Accepts variable overrides such as `{"total_thickness": 100}` |
 | `inspect_gds` | Per layer: number of shapes, extent, smallest shape and smallest gap (for choosing the mesh size and via merging). With a stackup, the role of each layer, and which layers gds2palace ignores |
+| `check_layout_complexity` | Before meshing: polygon count per layer (only layers the stackup uses, without flattening the layout, so it is fast for dense fill and via arrays), layout size, polygon density, the layers that dominate, and simplification hints. A report, no pass/fail limit |
+| `simplify_layout` | Writes a simplified copy of the layout, like setupEM's Tools > Simplify GDS: remove floating dummy fill, fill small cutouts, merge via arrays, merge each layer. Layers come from the stackup; returns polygon counts before and after |
 | `check_model_script` | Checks a model script without running it: settings that gds2palace doesn't read (typos such as `nogui` are silently ignored by gds2palace), missing required settings, port layers missing from the layer list, removed or legacy settings |
 | `generate_model` | Runs the model script without gmsh windows and checks the output: `config.json`, mesh with node and element counts, `port_information.json`, `run_sim`. With `save_geometry`, it also saves the unmeshed geometry |
 | `show_in_gmsh` | Opens the mesh, or the unmeshed geometry, in the gmsh GUI on the user's screen |

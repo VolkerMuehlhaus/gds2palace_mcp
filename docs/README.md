@@ -36,6 +36,7 @@ cloud, so everything a tool **returns** goes to it as part of the conversation, 
 |---|---|
 | `inspect_gds` | File path, cell name, the layer numbers used, shape count per layer, bounding boxes, smallest shape side and smallest gap per layer |
 | `inspect_stackup`, `list_stackups` | The stackup contents: layer heights, materials, conductivities. For the IHP stackups that ship with gds2palace, this is public data |
+| `check_layout_complexity`, `simplify_layout` | File paths, cell names, polygon counts per layer, layout size |
 | `check_model_script` | The setting values in the script (frequencies, mesh sizes, ...) |
 | `generate_model` | File paths, log lines from gds2palace and gmsh, mesh size |
 | `show_in_gmsh`, `show_sparameters` | Only the file paths. The windows are shown on your screen; the assistant doesn't see them |
@@ -72,6 +73,8 @@ server helps with all three and then builds the model.
 | "Which stackups are available?" | `list_stackups` | The IHP stackups that ship with gds2palace: SG13G2, SG13G2 with conformal passivation, SG13CMOS5L |
 | "Show me the SG13G2 stackup with a 100 µm thick chip" | `inspect_stackup` | Layers with GDS numbers and heights, materials, dielectrics, free layer numbers for ports |
 | "What is in my layout?" | `inspect_gds` | For each layer: number of shapes, size, smallest line and smallest gap, and what the layer is in the stackup (or that gds2palace ignores it) |
+| "Is this layout too complex for FEM?" | `check_layout_complexity` | Polygon count per layer, layout size and density, which layers dominate (e.g. via arrays, dummy fill), and what simplification would help |
+| "Remove the dummy fill and merge the via arrays" | `simplify_layout` | A simplified copy of your layout (`<name>_simplified.gds`), with polygon counts before and after. The original file is not changed |
 | "Write a model script for it" | (writes the file) | A gds2palace script, based on the official template |
 | "Check my script" | `check_model_script` | Typos in setting names, missing settings, port layers that are not read, outdated settings |
 | "Generate the model" | `generate_model` | The Palace input files (`config.json`, mesh, `run_sim`), the mesh size, and the warnings from meshing |
