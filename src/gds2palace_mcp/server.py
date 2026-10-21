@@ -14,7 +14,7 @@ from .common import Gds2palaceError
 from .layout import inspect_gds as _inspect_gds
 from .model_run import generate_model as _generate_model
 from .settings_check import check_model_script as _check_model_script
-from . import sparams
+from . import complexity, sparams
 from .stackup import inspect_stackup as _inspect_stackup, list_stackups as _list_stackups
 from .viewers import preview_layout as _preview_layout, show_in_gmsh as _show_in_gmsh
 
@@ -26,7 +26,8 @@ layout and an XML stackup file.
 
 Workflow: read the resource gds2palace://agents-guide first (how model scripts are written,
 settings, ports, pitfalls). Inspect the inputs with list_stackups, inspect_stackup and
-inspect_gds. Write the model script, starting from the template in the guide. Run
+inspect_gds; for unknown or tape-out layouts, check_layout_complexity and, if needed,
+simplify_layout. Write the model script, starting from the template in the guide. Run
 check_model_script, fix what it reports, then generate_model. preview_layout shows you the layout
 as an image with ports labelled; show_in_gmsh opens the model in a gmsh window for the user.
 For results (.sNp files): sparameter_summary and passive_values give numbers, plot_sparameters
@@ -82,6 +83,48 @@ def inspect_gds(gds_file: str, cellname: str = "", stackup_file: str = "",
     With stackup_file, each layer also shows its role in the stackup (conductor, via, derived
     layer operand, ...) or that gds2palace ignores it, and stackup layers without shapes are listed."""
     return _inspect_gds(gds_file, cellname, stackup_file, variable_overrides)
+
+
+@mcp.tool()
+@expected_errors
+def check_layout_complexity(gds_file: str, stackup_file: str, cellname: str = "",
+                            variable_overrides: dict | None = None) -> dict:
+    """Estimate how complex a layout is for FEM before meshing: polygon count per layer (only layers
+    the stackup uses, from the cell hierarchy without flattening, so it is fast even for dense fill
+    and via arrays), layout size, polygon density, which layers dominate, and hints for
+    simplify_layout. A report, not a pass/fail verdict: there is no measured polygon limit.
+    Run it on unknown or tape-out layouts before writing the model script."""
+    return complexity.check_layout_complexity(gds_file, stackup_file, cellname,
+                                              variable_overrides=variable_overrides)
+
+
+@mcp.tool()
+@expected_errors
+def simplify_layout(gds_file: str, stackup_file: str, output_file: str = "", cellname: str = "",
+                    remove_floating_fill: bool = False, fill_cutouts: bool = False, merge_vias: bool = False,
+                    via_merge_size: float = 1.0, merge_per_layer: bool = False, fill_minsize: float = 1.0,
+                    fill_maxsize: float | None = None, fill_mincount: int = 20,
+                    max_hole_area: float | None = None, exclude_layers: list[int] | None = None,
+                    variable_overrides: dict | None = None) -> dict:
+    """Simplify a layout for EM simulation and write it to a new GDS file (default
+    <name>_simplified.gds; the original is never changed). Same operations as setupEM's
+    Tools > Simplify GDS (gds_prepare_for_EM), with metal and via layers from the stackup:
+
+    remove_floating_fill: remove unconnected dummy fill (groups of at least fill_mincount pieces of
+      the same size, between fill_minsize and fill_maxsize um).
+    fill_cutouts: fill small cutouts (holes) in metal, up to max_hole_area um^2 (None = all sizes).
+    merge_vias: merge vias closer than via_merge_size um that connect the same metal shapes above
+      and below (never shorts different shapes).
+    merge_per_layer: merge touching polygons on each metal layer.
+    exclude_layers: GDS layers to leave unchanged.
+
+    These change the geometry: ask the user before removing fill or filling cutouts, since both can
+    change the result (e.g. fill near a coil, slots in a ground plane). Returns polygon counts per
+    changed layer before/after, the cell to use, and the log summary."""
+    return complexity.simplify_layout(gds_file, stackup_file, output_file, cellname, remove_floating_fill,
+                                      fill_cutouts, merge_vias, via_merge_size, merge_per_layer,
+                                      fill_minsize, fill_maxsize, fill_mincount, max_hole_area,
+                                      exclude_layers, variable_overrides)
 
 
 @mcp.tool()
@@ -237,7 +280,8 @@ def new_model(gds_file: str = "", what: str = "") -> str:
 Layout: {gds_file or '(ask me)'}. Structure: {what or '(ask me)'}.
 
 1. Read gds2palace://agents-guide.
-2. Run inspect_gds on the layout (with the stackup, once chosen) and list_stackups.
+2. Run inspect_gds on the layout (with the stackup, once chosen) and list_stackups. For a large or
+   tape-out layout, run check_layout_complexity and suggest simplify_layout where it helps.
 3. Before writing the script, ask me for: frequency range and points of interest; which GDS
    layers hold the ports, port type (via or in-plane), the metals they connect, polarity and
    reference impedance; which stackup (planar or conformal passivation, chip thickness);
