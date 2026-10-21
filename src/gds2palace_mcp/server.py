@@ -104,7 +104,7 @@ def simplify_layout(gds_file: str, stackup_file: str, output_file: str = "", cel
                     remove_floating_fill: bool = False, fill_cutouts: bool = False, merge_vias: bool = False,
                     via_merge_size: float = 1.0, merge_per_layer: bool = False, fill_minsize: float = 1.0,
                     fill_maxsize: float | None = None, fill_mincount: int = 20,
-                    max_hole_area: float | None = None, exclude_layers: list[int] | None = None,
+                    max_hole_area: float | None = 1.0, exclude_layers: list[int] | None = None,
                     variable_overrides: dict | None = None) -> dict:
     """Simplify a layout for EM simulation and write it to a new GDS file (default
     <name>_simplified.gds; the original is never changed). Same operations as setupEM's
@@ -112,7 +112,9 @@ def simplify_layout(gds_file: str, stackup_file: str, output_file: str = "", cel
 
     remove_floating_fill: remove unconnected dummy fill (groups of at least fill_mincount pieces of
       the same size, between fill_minsize and fill_maxsize um).
-    fill_cutouts: fill small cutouts (holes) in metal, up to max_hole_area um^2 (None = all sizes).
+    fill_cutouts: fill small cutouts (holes) in metal, up to max_hole_area um^2 (default 1, as in
+      setupEM). None fills holes of any size, including openings that belong to the circuit, e.g.
+      inside the rings of a coupler: only with the user's explicit OK.
     merge_vias: merge vias closer than via_merge_size um that connect the same metal shapes above
       and below (never shorts different shapes).
     merge_per_layer: merge touching polygons on each metal layer.

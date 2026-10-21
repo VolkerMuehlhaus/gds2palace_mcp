@@ -79,7 +79,7 @@ def check_layout_complexity(gds_file, stackup_file, cellname="", purposelist=(0,
 
 def simplify_layout(gds_file, stackup_file, output_file="", cellname="", remove_floating_fill=False,
                     fill_cutouts=False, merge_vias=False, via_merge_size=1.0, merge_per_layer=False,
-                    fill_minsize=1.0, fill_maxsize=None, fill_mincount=20, max_hole_area=None,
+                    fill_minsize=1.0, fill_maxsize=None, fill_mincount=20, max_hole_area=1.0,
                     exclude_layers=None, variable_overrides=None):
     from gds_simplify_for_em import estimate_polygon_count_by_layer, layers_from_stackup, run_simplify
 
