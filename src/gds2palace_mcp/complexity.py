@@ -79,13 +79,18 @@ def check_layout_complexity(gds_file, stackup_file, cellname="", purposelist=(0,
 
 def simplify_layout(gds_file, stackup_file, output_file="", cellname="", remove_floating_fill=False,
                     fill_cutouts=False, merge_vias=False, via_merge_size=1.0, merge_per_layer=False,
-                    fill_minsize=1.0, fill_maxsize=None, fill_mincount=20, max_hole_area=1.0,
-                    exclude_layers=None, variable_overrides=None):
+                    fill_minsize=1.0, fill_maxsize=None, fill_mincount=20, max_hole_area=None,
+                    exclude_layers=None, variable_overrides=None, fill_ground_holes=False,
+                    ground_hole_mincount=20):
     from gds_simplify_for_em import estimate_polygon_count_by_layer, layers_from_stackup, run_simplify
 
-    if not (remove_floating_fill or fill_cutouts or merge_vias or merge_per_layer):
-        raise ValueError("Choose at least one operation: remove_floating_fill, fill_cutouts, merge_vias, "
-                         "merge_per_layer.")
+    if not (remove_floating_fill or fill_cutouts or merge_vias or merge_per_layer or fill_ground_holes):
+        raise ValueError("Choose at least one operation: remove_floating_fill, fill_ground_holes, merge_vias, "
+                         "merge_per_layer (or fill_cutouts with an explicit max_hole_area).")
+    if fill_cutouts and max_hole_area is None:
+        raise ValueError("fill_cutouts needs an explicit max_hole_area (total hole area per polygon, um2) "
+                         "from the user. For repeated openings in ground planes, measured in the layout, use "
+                         "fill_ground_holes (see measure_holes).")
     if merge_vias and not via_merge_size > 0:
         raise ValueError("via_merge_size must be > 0.")
 
@@ -98,6 +103,12 @@ def simplify_layout(gds_file, stackup_file, output_file="", cellname="", remove_
     output_file = os.path.abspath(output_file)
     if os.path.normcase(output_file) == os.path.normcase(gds_file):
         raise ValueError("output_file must differ from gds_file: the original layout is never overwritten.")
+
+    hole_note = None
+    if fill_ground_holes:
+        from .holes import measure_holes
+        holes = measure_holes(gds_file, stackup_file, cellname, ground_hole_mincount, variable_overrides)
+        hole_note = "fill_ground_holes: " + holes["suggestion"]["reason"]
 
     _, _, _, metals_list = read_stackup(stackup_file, variable_overrides)
     excluded = {int(n) for n in exclude_layers or []}
@@ -113,7 +124,8 @@ def simplify_layout(gds_file, stackup_file, output_file="", cellname="", remove_
                      do_cutouts=fill_cutouts, max_hole_area=max_hole_area,
                      do_floating=remove_floating_fill, fill_minsize=fill_minsize, fill_maxsize=fill_maxsize,
                      fill_mincount=fill_mincount, do_merge=merge_per_layer,
-                     via_layers=via_layers if merge_vias else None, via_merge_size=via_merge_size if merge_vias else 0)
+                     via_layers=via_layers if merge_vias else None, via_merge_size=via_merge_size if merge_vias else 0,
+                     fill_ground_holes=fill_ground_holes, ground_hole_mincount=ground_hole_mincount)
     seconds = time.perf_counter() - start
 
     # the output can have several top-level cells (subcells left over after flattening), and merging
@@ -146,6 +158,8 @@ def simplify_layout(gds_file, stackup_file, output_file="", cellname="", remove_
                         and " : repairing " not in line and " replacing " not in line][-30:],
         "notes": ["The original file is unchanged. Use output_file in the model script (gds_filename)."],
     }
+    if hole_note:
+        result["notes"].append(hole_note)
     if len(tops) > 1:
         result["notes"].append(f"The output has {len(tops)} top-level cells. gds2palace reads the first top-level "
                                f"cell unless cellname is set: set cellname = '{main.name}' in the model script.")

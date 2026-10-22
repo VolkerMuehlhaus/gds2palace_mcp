@@ -74,6 +74,7 @@ server helps with all three and then builds the model.
 | "Show me the SG13G2 stackup with a 100 µm thick chip" | `inspect_stackup` | Layers with GDS numbers and heights, materials, dielectrics, free layer numbers for ports |
 | "What is in my layout?" | `inspect_gds` | For each layer: number of shapes, size, smallest line and smallest gap, and what the layer is in the stackup (or that gds2palace ignores it) |
 | "Is this layout too complex for FEM?" | `check_layout_complexity` | Polygon count per layer, layout size and density, which layers dominate (e.g. via arrays, dummy fill), and what simplification would help |
+| "Which holes are in my ground planes?" | `measure_holes` | The opening sizes that repeat many times in each ground plane (cheesing, tiled meshes), measured in your layout, and the openings that belong to the circuit and stay open |
 | "Remove the dummy fill and merge the via arrays" | `simplify_layout` | A simplified copy of your layout (`<name>_simplified.gds`), with polygon counts before and after. The original file is not changed |
 | "Which mesh size do I need?" | `suggest_mesh_size` | The `refined_cellsize` for an accurate and a quick model, from the narrowest traces and the smallest gaps between coupled lines on the top metal layers |
 | "Where should the ports go?" | `propose_ports`, `add_ports` | Port positions from your pins, labels or open line ends, each with a ground reference; after you confirm, a copy of the layout with the port lines |
