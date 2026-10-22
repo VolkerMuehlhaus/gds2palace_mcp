@@ -17,7 +17,7 @@ pip install gds2palace_mcp
 ```
 
 This also installs gds2palace and its requirements (gdspy, gmsh, shapely, numpy), gds_prepare_for_EM, gds_viewer,
-plot_snp and scikit-rf. It needs gds2palace 0.9.1 or newer, the first version that ships the IHP stackup files.
+plot_snp and scikit-rf. It needs gds2palace 0.9.2 or newer, which ships the IHP stackup files and the result tools.
 
 Add the server to Claude Code, using the Python environment where it is installed:
 
@@ -42,13 +42,19 @@ For Claude Desktop and other clients, add the same command to the client's MCP s
 | `inspect_gds` | Per layer: number of shapes, extent, smallest shape and smallest gap (for choosing the mesh size and via merging). With a stackup, the role of each layer, and which layers gds2palace ignores |
 | `check_layout_complexity` | Before meshing: polygon count per layer (only layers the stackup uses, without flattening the layout, so it is fast for dense fill and via arrays), layout size, polygon density, the layers that dominate, and simplification hints. A report, no pass/fail limit |
 | `simplify_layout` | Writes a simplified copy of the layout, like setupEM's Tools > Simplify GDS: remove floating dummy fill, fill small cutouts, merge via arrays, merge each layer. Layers come from the stackup; returns polygon counts before and after |
-| `check_model_script` | Checks a model script without running it: settings that gds2palace doesn't read (typos such as `nogui` are silently ignored by gds2palace), missing required settings, port layers missing from the layer list, removed or legacy settings |
-| `generate_model` | Runs the model script without gmsh windows and checks the output: `config.json`, mesh with node and element counts, `port_information.json`, `run_sim`. With `save_geometry`, it also saves the unmeshed geometry |
+| `suggest_mesh_size` | Before the mesh settings are discussed: traces and coupled lines on the top 2 conductor layers with shapes, and the `refined_cellsize` that follows from their smallest width or gap (IHP: accurate 2 µm, quick 5 µm by default; other technologies: the smallest feature itself; never larger than the smallest feature), also as a per-layer override |
+| `propose_ports` | For a layout without port shapes: port candidates from pins, labels (integer labels give the port numbers) or open trace ends, each with a reference ground (closest solid ground metal below, else SUBGND) |
+| `add_ports` | Writes a copy of the layout with the confirmed port lines on layers 201 and up, plus the `add_port` lines for the script |
+| `check_ports` | Checks the ports against the layout before meshing: via port lines on metal of both layers, in-plane ports touching metal at both ends, layer collisions, several shapes on one port layer |
+| `check_model_script` | Checks a model script without running it: settings that gds2palace doesn't read (typos such as `nogui` are silently ignored by gds2palace), missing required settings, port layers missing from the layer list, removed or legacy settings, a `refined_cellsize` larger than the layout's smallest trace width or coupled-line gap, and the port check |
+| `generate_model` | Runs the model script without gmsh windows and checks the output: `config.json`, mesh with node and element counts, `port_information.json`, `run_sim`. Estimates the Palace unknowns and peak RAM from the mesh (calibrated on 158 Palace runs). With `save_geometry`, it also saves the unmeshed geometry |
 | `show_in_gmsh` | Opens the mesh, or the unmeshed geometry, in the gmsh GUI on the user's screen |
-| `preview_layout` | The layout as an image (IHP SG13G2 colors, via [gds_viewer](https://github.com/VolkerMuehlhaus/gds_viewer)) with the ports labelled, for the assistant to look at |
+| `preview_layout` | The layout as an image (via [gds_viewer](https://github.com/VolkerMuehlhaus/gds_viewer)) with the ports labelled, for the assistant to look at. IHP SG13G2 colors and patterns; for other technologies, colors from the stackup materials, with a legend |
+| `summarize_results` | Summary of finished Palace runs (gds2palace's palace_summary): unknowns, mesh elements, run time, peak RAM, AMR convergence (Max \|ΔS\| per iteration, optional plot), Touchstone files found, "did NOT converge" in saved logs |
 | `sparameter_summary` | Numbers from Touchstone files: ports, frequency range, passivity and reciprocity, dB minimum/maximum, dB/phase at chosen frequencies |
 | `plot_sparameters` | dB/phase plots and Smith charts as images for the assistant (via [plot_snp](https://github.com/VolkerMuehlhaus/plot_snp)), several files in one plot |
 | `show_sparameters` | Opens the interactive plot_snp windows on the user's screen |
+| `fit_equivalent_circuit` | SPICE equivalent circuit (Ngspice/VACASK) from a Touchstone file with [snp2le](https://github.com/iic-jku/snp2le) in command-line mode: inductor, MIM capacitor, line, Wilkinson, balun, branch-line structures or a universal vector fit. Needs `pip install snp2le` |
 | `passive_values` | L or C, R and Q of an inductor or capacitor (differential, single-ended or series), peak Q, self-resonance frequency, optional L/Q plot |
 
 Resources: `gds2palace://agents-guide` (gds2palace's [AGENTS.md](https://github.com/VolkerMuehlhaus/gds2palace_ihp_sg13g2/blob/main/AGENTS.md):

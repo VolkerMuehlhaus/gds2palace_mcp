@@ -12,17 +12,78 @@ TAIL_LINES = 40
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 
+# Palace unknowns (degrees of freedom) per tetrahedron and FEM order: median and range over the
+# 163 Palace runs without AMR in the gds2palace repository (palace.json DegreesOfFreedom /
+# MeshElements, 2026-10-22). Palace's MeshElements are the .msh tetrahedra (element type 4).
+DOF_PER_TET = {1: (1.350, 1.319, 1.387), 2: (6.775, 6.336, 7.222), 3: (19.875, 19.875, 19.875)}
+
+# Palace peak memory, summed over all MPI processes: setupEM's base fit (setupEM.py, 92 order-2
+# runs) 0.5 GB + 11.7 GB per million unknowns, times a factor per (order, complex coarse solve):
+# median (typical) and maximum + 10 % (worst case) of real / base over the 158 Palace runs without
+# AMR in the gds2palace repository that report PeakMemoryMegabytes (2026-10-22): order 1 n=10/5,
+# order 2 n=71/70. Order 1 needs about twice the memory per unknown. Order 3 (2 runs) uses the
+# order-2 factors.
+RAM_OFFSET_GB, RAM_GB_PER_MDOF = 0.5, 11.7
+RAM_FACTORS = {(1, False): (2.14, 2.65), (1, True): (2.97, 3.6),
+               (2, False): (0.99, 1.41), (2, True): (1.13, 1.46)}
+
+
 def _msh_counts(msh_path):
-    """Node and element counts from a gmsh 2.2 ASCII mesh (the format gds2palace writes)."""
+    """Node, element and tetrahedron counts from a gmsh 2.2 ASCII mesh (the format gds2palace writes)."""
     counts = {}
     with open(msh_path, encoding="ascii", errors="replace") as f:
         for line in f:
             section = line.strip()
-            if section in ("$Nodes", "$Elements"):
-                counts[section[1:].lower()] = int(f.readline().split()[0])
-                if len(counts) == 2:
-                    break
+            if section == "$Nodes":
+                counts["nodes"] = int(f.readline().split()[0])
+            elif section == "$Elements":
+                n = int(f.readline().split()[0])
+                counts["elements"] = n
+                counts["tetrahedra"] = sum(f.readline().split(None, 2)[1] == "4" for _ in range(n))
+                break
     return counts
+
+
+def _ram_gb(mdof, factors):
+    base = RAM_OFFSET_GB + RAM_GB_PER_MDOF * mdof
+    return round(factors[0] * base, 1), round(factors[1] * base, 1)
+
+
+def estimate_resources(tetrahedra, config_path):
+    """Palace unknowns and peak RAM from the tetrahedron count and the model's config.json."""
+    with open(config_path, encoding="utf-8") as f:
+        config = json.load(f)
+    order = int(config.get("Solver", {}).get("Order", 2))
+    complex_coarse = bool(config.get("Solver", {}).get("Linear", {}).get("ComplexCoarseSolve", False))
+    refinement = config.get("Model", {}).get("Refinement", {})
+    amr_iterations = int(refinement.get("MaxIts", 0) or 0)
+    median, low, high = DOF_PER_TET.get(order, DOF_PER_TET[2])
+    dof = tetrahedra * median
+    factors = RAM_FACTORS[(min(order, 2), complex_coarse)]
+    typical, worst = _ram_gb(dof / 1e6, factors)
+    estimate = {
+        "order": order,
+        "unknowns": int(round(dof, -3)),
+        "unknowns_range": [int(round(tetrahedra * low, -3)), int(round(tetrahedra * high, -3))],
+        "peak_ram_gb": {"typical": typical, "worst_case": worst},
+        "complex_coarse_solve": complex_coarse,
+        "notes": [f"Unknowns = tetrahedra x {median:g} for order {order} (range {low:g}-{high:g}), from "
+                  "Palace runs without AMR in the gds2palace repository (within +-7 %).",
+                  "Peak RAM summed over all MPI processes, calibrated on the same runs per FEM order and coarse "
+                  "solve type; real runs were never above worst_case."],
+    }
+    if order == 3:
+        estimate["notes"].append("Order 3: only 2 calibration runs; the order-2 RAM factors are used, which "
+                                 "is likely too high.")
+    if amr_iterations:
+        max_dof = float(refinement.get("MaxSize", 0) or 0)
+        estimate["amr"] = {"iterations": amr_iterations, "max_unknowns": int(max_dof)}
+        if max_dof > dof:
+            amr_typical, amr_worst = _ram_gb(max_dof / 1e6, factors)
+            estimate["amr"]["peak_ram_gb_at_max_unknowns"] = {"typical": amr_typical, "worst_case": amr_worst}
+            estimate["notes"].append("With AMR the mesh grows each iteration, up to max_unknowns (amr_max_dof): "
+                                     "the RAM at that size is the upper bound.")
+    return estimate
 
 
 def _important_lines(lines):
@@ -77,7 +138,10 @@ def generate_model(script_path, timeout_s=1800, save_geometry=False):
             entry["mesh_size_MB"] = round(os.path.getsize(msh) / 1e6, 1)
             try:
                 entry.update(_msh_counts(msh))
-            except (OSError, ValueError, IndexError):
+                config = os.path.join(sim_path, f"config{suffix}.json")
+                if entry.get("tetrahedra") and os.path.isfile(config):
+                    entry["estimate"] = estimate_resources(entry["tetrahedra"], config)
+            except (OSError, ValueError, IndexError, KeyError):
                 pass
         else:
             files[f"{basename}.msh"] = False

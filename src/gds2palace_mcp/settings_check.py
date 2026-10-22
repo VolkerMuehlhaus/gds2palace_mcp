@@ -42,6 +42,101 @@ def _call_name(node):
     return func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
 
 
+def _script_inputs(tree, script_dir, assigned):
+    """gds_filename, XML_filename and cellname as the script assigns them, if they are literals
+    (XML_filename may also be utilities.get_stackup_path("name")); setupEM's scripts use
+    settings['GdsFile'], settings['SubstrateFile'] and settings['cellname']. Paths relative to the script."""
+    values = {}
+    for key, name in (("GdsFile", "gds_filename"), ("SubstrateFile", "XML_filename"), ("cellname", "cellname")):
+        value = assigned.get(key, (0, None))[1]
+        if isinstance(value, str):
+            values[name] = value
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)):
+            continue
+        name, value = node.targets[0].id, node.value
+        if name not in ("gds_filename", "XML_filename", "cellname"):
+            continue
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            values[name] = value.value
+        elif (name == "XML_filename" and isinstance(value, ast.Call) and _call_name(value) == "get_stackup_path"
+              and value.args and isinstance(value.args[0], ast.Constant)):
+            values[name] = value.args[0].value     # bundled stackup name, resolved by read_stackup
+    for name in ("gds_filename", "XML_filename"):
+        if name in values and not os.path.isabs(values[name]):
+            candidate = os.path.join(script_dir, values[name])
+            if os.path.exists(candidate) or name == "gds_filename":
+                values[name] = os.path.normpath(candidate)
+    return values
+
+
+def _mesh_size_check(tree, script_path, assigned, warnings, info):
+    """Compare refined_cellsize (and per-layer overrides) with suggest_mesh_size for the script's layout."""
+    from .meshsize import DEFAULT_ACCURATE_UM, cellsize_for_feature, is_ihp_stackup, suggest_mesh_size
+
+    cellsize = assigned.get("refined_cellsize", (0, None))
+    if not isinstance(cellsize[1], (int, float)):
+        return
+    inputs = _script_inputs(tree, os.path.dirname(script_path), assigned)
+    if "gds_filename" not in inputs or "XML_filename" not in inputs:
+        info.append("refined_cellsize was not compared with the layout: gds_filename or XML_filename is not a "
+                    "literal in the script. Run suggest_mesh_size on the layout instead.")
+        return
+    try:
+        result = suggest_mesh_size(inputs["gds_filename"], inputs["XML_filename"], inputs.get("cellname", ""))
+    except Exception as e:   # the layout check is advice: never let it break the script check
+        info.append(f"refined_cellsize was not compared with the layout ({type(e).__name__}: {e}).")
+        return
+    overrides = {}
+    override = assigned.get("refined_cellsize_override", (0, None))[1]
+    if isinstance(override, (list, tuple)):
+        overrides = {str(item[0]): item[1] for item in override if isinstance(item, (list, tuple)) and len(item) == 2}
+
+    # smallest trace width or coupled-line gap/width per layer
+    smallest = {}
+    for item in result["traces"] + result["coupled_lines"]:
+        size = min([item.get("width_um", 1e9), item.get("gap_um", 1e9), *item.get("line_widths_um", [])])
+        smallest[item["name"]] = min(smallest.get(item["name"], size), size)
+
+    for name, feature in sorted(smallest.items()):
+        used = overrides.get(name, cellsize[1])
+        if not isinstance(used, (int, float)):
+            continue
+        ihp = is_ihp_stackup(inputs["XML_filename"])
+        limit = cellsize_for_feature(feature, ihp)        # never above the smallest feature
+        accurate = min(DEFAULT_ACCURATE_UM, limit) if ihp else limit
+        where = (f"refined_cellsize_override for {name}" if name in overrides
+                 else f"refined_cellsize (line {cellsize[0]})")
+        if used > limit:
+            warnings.append(
+                f"{where} = {used:g} um is larger than the smallest trace width or coupled-line gap on {name} "
+                f"({feature:g} um). Use {limit:g} um or less, also for quick models; larger only if the user "
+                "explicitly asked for it.")
+        elif used > accurate:
+            info.append(f"{where} = {used:g} um is fine for a quick model of {name} (smallest trace or gap "
+                        f"{feature:g} um); for accurate results use {accurate:g} um (suggest_mesh_size).")
+
+
+def _port_check(tree, script_path, assigned, errors, warnings, info):
+    """Ports of the script against the layout (check_ports), if the files can be found."""
+    from .ports import check_ports, ports_from_script
+
+    _, port_defs = ports_from_script(script_path)
+    if not port_defs:
+        return
+    inputs = _script_inputs(tree, os.path.dirname(script_path), assigned)
+    if "gds_filename" not in inputs or "XML_filename" not in inputs:
+        return       # already reported by the mesh size check
+    try:
+        result = check_ports(inputs["gds_filename"], inputs["XML_filename"], port_defs, inputs.get("cellname", ""))
+    except Exception as e:   # advice only: never break the script check
+        info.append(f"The ports were not checked against the layout ({type(e).__name__}: {e}).")
+        return
+    errors.extend(result["errors"])
+    warnings.extend(result["warnings"])
+    info.extend(result["info"])
+
+
 def check_model_script(script_path):
     script_path = os.path.abspath(script_path)
     with open(script_path, encoding="utf-8") as f:
@@ -104,6 +199,9 @@ def check_model_script(script_path):
                         "list before read_gds().")
     if creates_model and not thermal and "create_run_script" not in calls:
         info.append("utilities.create_run_script(sim_path) is not called, so no run_sim script is written.")
+
+    _mesh_size_check(tree, script_path, assigned, warnings, info)
+    _port_check(tree, script_path, assigned, errors, warnings, info)
 
     no_gui = assigned.get("no_gui", (0, None))[1]
     if no_gui is not True:

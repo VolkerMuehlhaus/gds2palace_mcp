@@ -181,8 +181,9 @@ This took 9 seconds. Larger layouts or finer meshes take minutes.
 
 ## 4. After the simulation
 
-The Palace run itself is outside this server (see [README.md](README.md#what-it-cant-do)). When the `.s2p` file is
-back, you can continue in the same conversation, for example:
+The Palace run itself is outside this server (see [README.md](README.md#what-it-cant-do)). When the results are
+back on your computer, ask "Did the run finish, and how long did it take?": `summarize_results` reports the unknowns,
+run time and peak RAM, and the Touchstone files it found. Then you can continue in the same conversation, for example:
 
 > **You:** What are L and Q of L2n0_model.s2p, and show me the curves.
 
