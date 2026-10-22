@@ -14,7 +14,7 @@ from .common import Gds2palaceError
 from .layout import inspect_gds as _inspect_gds
 from .model_run import generate_model as _generate_model
 from .settings_check import check_model_script as _check_model_script
-from . import complexity, results, sparams
+from . import complexity, meshsize, results, sparams
 from .stackup import inspect_stackup as _inspect_stackup, list_stackups as _list_stackups
 from .viewers import preview_layout as _preview_layout, show_in_gmsh as _show_in_gmsh
 
@@ -27,7 +27,9 @@ layout and an XML stackup file.
 Workflow: read the resource gds2palace://agents-guide first (how model scripts are written,
 settings, ports, pitfalls). Inspect the inputs with list_stackups, inspect_stackup and
 inspect_gds; for unknown or tape-out layouts, check_layout_complexity and, if needed,
-simplify_layout. Write the model script, starting from the template in the guide. Run
+simplify_layout. Before asking the user about mesh settings, run suggest_mesh_size and propose
+its refined_cellsize: never a larger one, also not for quick models, unless the user explicitly
+asks for it. Write the model script, starting from the template in the guide. Run
 check_model_script, fix what it reports, then generate_model. preview_layout shows you the layout
 as an image with ports labelled; show_in_gmsh opens the model in a gmsh window for the user.
 For finished Palace runs, summarize_results gives run time, RAM, unknowns and AMR convergence.
@@ -128,6 +130,22 @@ def simplify_layout(gds_file: str, stackup_file: str, output_file: str = "", cel
                                       fill_cutouts, merge_vias, via_merge_size, merge_per_layer,
                                       fill_minsize, fill_maxsize, fill_mincount, max_hole_area,
                                       exclude_layers, variable_overrides)
+
+
+@mcp.tool()
+@expected_errors
+def suggest_mesh_size(gds_file: str, stackup_file: str, cellname: str = "",
+                      variable_overrides: dict | None = None) -> dict:
+    """Suggest refined_cellsize from the layout, BEFORE asking the user about mesh settings.
+    Looks at the top 2 conductor layers of the stackup for traces (length >= 10x width and >= 20 %
+    of the larger layout side) and coupled lines (gap <= 2x the narrower line width, parallel for
+    >= 20 % of the larger layout side), and suggests refined_cellsize for accurate (default 2 um) and
+    quick (default 5 um) models: the smallest flagged width or gap, rounded down to 0.5 um, if that
+    is smaller than the default. Also gives a per-layer alternative (refined_cellsize_override).
+
+    Never propose a larger refined_cellsize than suggested, also not for quick models; go larger
+    only if the user explicitly asks for it."""
+    return meshsize.suggest_mesh_size(gds_file, stackup_file, cellname, variable_overrides)
 
 
 @mcp.tool()
@@ -313,12 +331,14 @@ Layout: {gds_file or '(ask me)'}. Structure: {what or '(ask me)'}.
 1. Read gds2palace://agents-guide.
 2. Run inspect_gds on the layout (with the stackup, once chosen) and list_stackups. For a large or
    tape-out layout, run check_layout_complexity and suggest simplify_layout where it helps.
-3. Before writing the script, ask me for: frequency range and points of interest; which GDS
+3. Run suggest_mesh_size (layout + stackup) before asking about the mesh, and propose its
+   refined_cellsize for accurate and quick models; never larger unless I explicitly ask.
+4. Before writing the script, ask me for: frequency range and points of interest; which GDS
    layers hold the ports, port type (via or in-plane), the metals they connect, polarity and
    reference impedance; which stackup (planar or conformal passivation, chip thickness);
    accuracy versus run time. Suggest values from the layout, but let me decide.
-4. Write the script from the guide's template, run check_model_script, fix, then generate_model.
-5. Report the mesh size and anything in important_lines, and how to run Palace (run_sim on Linux)."""
+5. Write the script from the guide's template, run check_model_script, fix, then generate_model.
+6. Report the mesh size and anything in important_lines, and how to run Palace (run_sim on Linux)."""
 
 
 def main():

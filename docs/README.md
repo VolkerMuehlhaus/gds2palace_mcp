@@ -75,6 +75,7 @@ server helps with all three and then builds the model.
 | "What is in my layout?" | `inspect_gds` | For each layer: number of shapes, size, smallest line and smallest gap, and what the layer is in the stackup (or that gds2palace ignores it) |
 | "Is this layout too complex for FEM?" | `check_layout_complexity` | Polygon count per layer, layout size and density, which layers dominate (e.g. via arrays, dummy fill), and what simplification would help |
 | "Remove the dummy fill and merge the via arrays" | `simplify_layout` | A simplified copy of your layout (`<name>_simplified.gds`), with polygon counts before and after. The original file is not changed |
+| "Which mesh size do I need?" | `suggest_mesh_size` | The `refined_cellsize` for an accurate and a quick model, from the narrowest traces and the smallest gaps between coupled lines on the top metal layers |
 | "Write a model script for it" | (writes the file) | A gds2palace script, based on the official template |
 | "Check my script" | `check_model_script` | Typos in setting names, missing settings, port layers that are not read, outdated settings |
 | "Generate the model" | `generate_model` | The Palace input files (`config.json`, mesh, `run_sim`), the mesh size, and the warnings from meshing |
@@ -87,8 +88,10 @@ server helps with all three and then builds the model.
 
 Some things this helps with in practice:
 
-- **Choosing the mesh size.** The smallest gap on each metal layer is the number you need for `refined_cellsize`.
-  The assistant reads it from your layout instead of guessing.
+- **Choosing the mesh size.** The mesh cell size must not be larger than the narrowest trace or the smallest gap
+  between coupled lines: in the gds2palace mesh convergence studies, 5 µm cells on a 2 µm gap gave clearly wrong
+  results or crashed the solver. The assistant finds these features in your layout and suggests the cell size,
+  also for quick models. It only goes coarser if you ask for it.
 - **Catching silent mistakes.** gds2palace ignores setting names it doesn't know. `settings['nogui'] = True` (instead
   of `no_gui`) gives no error, and the run then hangs in an invisible gmsh window. `check_model_script` finds such
   typos.
