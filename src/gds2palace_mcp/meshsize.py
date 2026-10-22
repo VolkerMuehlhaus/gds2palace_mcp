@@ -15,9 +15,29 @@ TOP_LAYERS = 2                 # conductor layers checked, from the top of the s
 RELEVANT_FRACTION = 0.20       # trace / coupled section length vs. the larger layout side
 TRACE_ASPECT = 10.0            # trace length vs. its width
 COUPLING_GAP_FACTOR = 2.0      # coupled lines: gap <= this x the narrower line width
-MAX_DISTANCE_UM = 50.0         # widths and gaps searched up to this distance
+MAX_DISTANCE_FRACTION = 0.25   # widths and gaps searched up to this share of the larger layout side
 PARALLEL_TOL_DEG = 1.0
 MIN_OVERLAP_UM = 0.1
+
+
+def is_ihp_stackup(stackup_file):
+    """The 2 um / 5 um defaults are IHP chip values: they apply to the SG13... stackups only."""
+    return os.path.basename(str(stackup_file)).upper().startswith("SG13")
+
+
+def round_down_125(value_um):
+    """Round down to a 1-2-5 step (..., 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, ...)."""
+    exponent = math.floor(math.log10(value_um))
+    for mantissa in (5, 2, 1):
+        step = mantissa * 10 ** exponent
+        if step <= value_um * (1 + 1e-9):
+            return float(f"{step:.6g}")
+    return value_um
+
+
+def cellsize_for_feature(feature_um, ihp):
+    """Largest refined_cellsize for a smallest feature: 0.5 um steps on IHP chips, 1-2-5 steps elsewhere."""
+    return round_down_cellsize(feature_um) if ihp else round_down_125(feature_um)
 
 
 def round_down_cellsize(value_um):
@@ -106,17 +126,20 @@ def suggest_mesh_size(gds_file, stackup_file, cellname="", variable_overrides=No
     um = library.unit / 1e-6              # layout units -> microns
 
     _, _, dielectrics_list, metals_list = read_stackup(stackup_file, variable_overrides)
+    by_spec = cell.get_polygons(by_spec=True)
+    drawn = {int(l) for (l, d), ps in by_spec.items() if int(d) == 0 and len(ps)}
+
+    # the top conductor layers that have shapes in this layout
     conductors = sorted({(m.zmax, int(m.layernum), m.name) for m in metals_list.metals if m.is_metal},
                         reverse=True)
     top, seen = [], set()
     for _, layer, name in conductors:
-        if layer not in seen:
+        if layer not in seen and layer in drawn:
             seen.add(layer)
             top.append((layer, name))
         if len(top) == TOP_LAYERS:
             break
 
-    by_spec = cell.get_polygons(by_spec=True)
     stackup_layers = {int(m.layernum) for m in metals_list.metals} | set(dielectrics_list.get_boundary_layers())
     points = [p for (l, d), ps in by_spec.items() if int(l) in stackup_layers and int(d) == 0 for p in ps]
     if not points:
@@ -134,7 +157,7 @@ def suggest_mesh_size(gds_file, stackup_file, cellname="", variable_overrides=No
             continue
         geometry = shapely.unary_union(polys)
         edges = _edges(geometry)
-        pairs = _facing_pairs(geometry, edges, MAX_DISTANCE_UM / um, MIN_OVERLAP_UM / um)
+        pairs = _facing_pairs(geometry, edges, MAX_DISTANCE_FRACTION * size, MIN_OVERLAP_UM / um)
 
         # trace widths: strips through metal, grouped by width (0.01 um)
         width_of_edge = {}
@@ -177,10 +200,14 @@ def suggest_mesh_size(gds_file, stackup_file, cellname="", variable_overrides=No
         + [w for c in coupled for w in c["line_widths_um"]]
     smallest = min(features) if features else None
 
+    ihp = is_ihp_stackup(stackup_file)
+
     def suggestion(default):
+        if not ihp:      # no chip defaults: the smallest feature itself, or nothing to suggest
+            return None if smallest is None else cellsize_for_feature(smallest, ihp)
         if smallest is None or smallest >= default:
             return default
-        return round_down_cellsize(smallest)
+        return cellsize_for_feature(smallest, ihp)
 
     accurate, quick = suggestion(DEFAULT_ACCURATE_UM), suggestion(DEFAULT_QUICK_UM)
 
@@ -190,7 +217,7 @@ def suggest_mesh_size(gds_file, stackup_file, cellname="", variable_overrides=No
     # cheaper alternative: the small cell size only on the layers that have the small features
     per_layer = {}
     for level, default, value in (("accurate", DEFAULT_ACCURATE_UM, accurate), ("quick", DEFAULT_QUICK_UM, quick)):
-        if value < default:
+        if ihp and value < default:
             names = sorted({f["name"] for f in traces + coupled if smallest_feature(f) < default})
             per_layer[level] = {"refined_cellsize": default,
                                 "refined_cellsize_override": [[name, value] for name in names]}
@@ -207,14 +234,20 @@ def suggest_mesh_size(gds_file, stackup_file, cellname="", variable_overrides=No
                  "above the smallest gap or trace width gave clearly wrong results or solver crashes in the "
                  "mesh convergence studies. Go larger only if the user explicitly asks for it."),
         "notes": [
-            f"Checked the top {TOP_LAYERS} conductor layers of the stackup. Traces: metal strips with length "
+            f"Checked the top {TOP_LAYERS} conductor layers of the stackup that have shapes in the layout. Traces: metal strips with length "
             f">= {TRACE_ASPECT:g}x width and >= {RELEVANT_FRACTION:.0%} of the larger layout side. Coupled lines: "
             f"parallel edges across a gap <= {COUPLING_GAP_FACTOR:g}x the narrower line width, parallel for >= "
-            f"{RELEVANT_FRACTION:.0%} of the larger layout side. Widths and gaps up to {MAX_DISTANCE_UM:g} um.",
-            "Suggestions are rounded down to 0.5 um (0.1 um below 0.5 um). Defaults without small features: "
-            f"{DEFAULT_ACCURATE_UM:g} um (accurate), {DEFAULT_QUICK_UM:g} um (quick).",
+            f"{RELEVANT_FRACTION:.0%} of the larger layout side. Widths and gaps up to "
+            f"{MAX_DISTANCE_FRACTION:.0%} of the larger layout side.",
+            ("Suggestions are rounded down to 0.5 um (0.1 um below 0.5 um). Defaults without small features: "
+             f"{DEFAULT_ACCURATE_UM:g} um (accurate), {DEFAULT_QUICK_UM:g} um (quick).") if ihp else
+            ("Not an IHP stackup: the 2 um / 5 um chip defaults don't apply. The suggestion is the smallest "
+             "flagged trace width or gap, rounded down to a 1-2-5 step, for accurate and quick models."),
         ],
     }
+    if not ihp and smallest is None:
+        result["notes"].append("No traces or coupled lines found, so there is no suggestion: ask the user for "
+                               "refined_cellsize (in model units).")
     if per_layer:
         per_layer["note"] = ("Cheaper alternative to the global value: the small cell size only on the layers "
                              "with the small features (refined_cellsize_override), the default elsewhere.")

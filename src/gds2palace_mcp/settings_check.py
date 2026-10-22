@@ -72,7 +72,7 @@ def _script_inputs(tree, script_dir, assigned):
 
 def _mesh_size_check(tree, script_path, assigned, warnings, info):
     """Compare refined_cellsize (and per-layer overrides) with suggest_mesh_size for the script's layout."""
-    from .meshsize import DEFAULT_ACCURATE_UM, round_down_cellsize, suggest_mesh_size
+    from .meshsize import DEFAULT_ACCURATE_UM, cellsize_for_feature, is_ihp_stackup, suggest_mesh_size
 
     cellsize = assigned.get("refined_cellsize", (0, None))
     if not isinstance(cellsize[1], (int, float)):
@@ -102,8 +102,9 @@ def _mesh_size_check(tree, script_path, assigned, warnings, info):
         used = overrides.get(name, cellsize[1])
         if not isinstance(used, (int, float)):
             continue
-        limit = round_down_cellsize(feature)        # never above the smallest feature
-        accurate = min(DEFAULT_ACCURATE_UM, round_down_cellsize(feature))
+        ihp = is_ihp_stackup(inputs["XML_filename"])
+        limit = cellsize_for_feature(feature, ihp)        # never above the smallest feature
+        accurate = min(DEFAULT_ACCURATE_UM, limit) if ihp else limit
         where = (f"refined_cellsize_override for {name}" if name in overrides
                  else f"refined_cellsize (line {cellsize[0]})")
         if used > limit:

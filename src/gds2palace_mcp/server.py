@@ -137,11 +137,14 @@ def simplify_layout(gds_file: str, stackup_file: str, output_file: str = "", cel
 def suggest_mesh_size(gds_file: str, stackup_file: str, cellname: str = "",
                       variable_overrides: dict | None = None) -> dict:
     """Suggest refined_cellsize from the layout, BEFORE asking the user about mesh settings.
-    Looks at the top 2 conductor layers of the stackup for traces (length >= 10x width and >= 20 %
+    Looks at the top 2 conductor layers of the stackup that have shapes in the layout for traces (length >= 10x width and >= 20 %
     of the larger layout side) and coupled lines (gap <= 2x the narrower line width, parallel for
     >= 20 % of the larger layout side), and suggests refined_cellsize for accurate (default 2 um) and
     quick (default 5 um) models: the smallest flagged width or gap, rounded down to 0.5 um, if that
-    is smaller than the default. Also gives a per-layer alternative (refined_cellsize_override).
+    is smaller than the default. The 2/5 um defaults are IHP chip values (SG13... stackups); for
+    other technologies (e.g. PCB) the suggestion is the smallest flagged width or gap itself, and
+    without flagged features there is none: then ask the user. Also gives a per-layer alternative
+    (refined_cellsize_override).
 
     Never propose a larger refined_cellsize than suggested, also not for quick models; go larger
     only if the user explicitly asks for it."""
