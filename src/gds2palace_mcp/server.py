@@ -14,7 +14,7 @@ from .common import Gds2palaceError
 from .layout import inspect_gds as _inspect_gds
 from .model_run import generate_model as _generate_model
 from .settings_check import check_model_script as _check_model_script
-from . import circuit, complexity, meshsize, results, sparams
+from . import circuit, complexity, meshsize, ports, results, sparams
 from .stackup import inspect_stackup as _inspect_stackup, list_stackups as _list_stackups
 from .viewers import preview_layout as _preview_layout, show_in_gmsh as _show_in_gmsh
 
@@ -30,7 +30,8 @@ inspect_gds; for unknown or tape-out layouts, check_layout_complexity and, if ne
 simplify_layout. Before asking the user about mesh settings, run suggest_mesh_size and propose
 its refined_cellsize: never a larger one, also not for quick models, unless the user explicitly
 asks for it. Write the model script, starting from the template in the guide. Run
-check_model_script, fix what it reports, then generate_model. preview_layout shows you the layout
+check_model_script (includes the port check), fix what it reports, then generate_model. Without
+ports in the layout: propose_ports, confirm with the user, add_ports. preview_layout shows you the layout
 as an image with ports labelled; show_in_gmsh opens the model in a gmsh window for the user.
 For finished Palace runs, summarize_results gives run time, RAM, unknowns and AMR convergence.
 For results (.sNp files): fit_equivalent_circuit makes a SPICE model (snp2le);
@@ -150,6 +151,52 @@ def suggest_mesh_size(gds_file: str, stackup_file: str, cellname: str = "",
     Never propose a larger refined_cellsize than suggested, also not for quick models; go larger
     only if the user explicitly asks for it."""
     return meshsize.suggest_mesh_size(gds_file, stackup_file, cellname, variable_overrides)
+
+
+@mcp.tool()
+@expected_errors
+def check_ports(script_path: str = "", gds_file: str = "", stackup_file: str = "",
+                ports_list: list[dict] | None = None, cellname: str = "") -> dict:
+    """Check the ports against the layout BEFORE meshing, with gds2palace's port geometry: a via port
+    line must lie on metal of both its layers (from/to), an in-plane port rectangle must touch metal
+    of its target layer at both ends along its direction. Also: port layer collisions with the
+    stackup, several shapes on one port layer (only one is used), unknown layer names, direction.
+
+    Either script_path (ports, layout and stackup taken from the model script), or gds_file +
+    stackup_file + ports_list ([{portnumber, source_layernum, from_layername, to_layername,
+    direction} or {..., target_layername, direction}])."""
+    if script_path:
+        from .settings_check import _script_inputs
+        tree, port_defs = ports.ports_from_script(script_path)
+        inputs = _script_inputs(tree, os.path.dirname(os.path.abspath(script_path)), {})
+        if "gds_filename" not in inputs or "XML_filename" not in inputs:
+            raise ValueError("gds_filename/XML_filename are not literals in the script: pass gds_file and stackup_file.")
+        return ports.check_ports(inputs["gds_filename"], inputs["XML_filename"], port_defs, inputs.get("cellname", ""))
+    if not (gds_file and stackup_file and ports_list):
+        raise ValueError("Give script_path, or gds_file, stackup_file and ports_list.")
+    return ports.check_ports(gds_file, stackup_file, ports_list, cellname)
+
+
+@mcp.tool()
+@expected_errors
+def propose_ports(gds_file: str, stackup_file: str, cellname: str = "") -> dict:
+    """Propose via ports for a layout without port shapes: from IHP pin shapes (datatype 2) and text
+    labels on metal layers (a label beside a line end marks that end; integer labels give the port
+    numbers), else from open trace ends at the outer edge of the top 2 metal layers. The reference
+    is the closest solid ground metal below the port, else SUBGND. Proposals only: show them to the
+    user (e.g. preview_layout) and let them confirm positions, references and Z0 before add_ports."""
+    return ports.propose_ports(gds_file, stackup_file, cellname)
+
+
+@mcp.tool()
+@expected_errors
+def add_ports(gds_file: str, ports_list: list[dict], output_file: str = "", cellname: str = "") -> dict:
+    """Write a copy of the layout (default <name>_ports.gds; the original is never changed) with via
+    port lines on their port layers. ports_list: [{"portnumber": 1, "line": [x1, y1, x2, y2],
+    "source_layernum": 201}] (horizontal or vertical lines, e.g. from propose_ports; layer default
+    200 + portnumber). Only after the user confirmed the ports. Then add the add_port lines to the
+    script and run check_ports."""
+    return ports.add_ports(gds_file, ports_list, output_file, cellname)
 
 
 @mcp.tool()

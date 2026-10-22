@@ -117,6 +117,26 @@ def _mesh_size_check(tree, script_path, assigned, warnings, info):
                         f"{feature:g} um); for accurate results use {accurate:g} um (suggest_mesh_size).")
 
 
+def _port_check(tree, script_path, assigned, errors, warnings, info):
+    """Ports of the script against the layout (check_ports), if the files can be found."""
+    from .ports import check_ports, ports_from_script
+
+    _, port_defs = ports_from_script(script_path)
+    if not port_defs:
+        return
+    inputs = _script_inputs(tree, os.path.dirname(script_path), assigned)
+    if "gds_filename" not in inputs or "XML_filename" not in inputs:
+        return       # already reported by the mesh size check
+    try:
+        result = check_ports(inputs["gds_filename"], inputs["XML_filename"], port_defs, inputs.get("cellname", ""))
+    except Exception as e:   # advice only: never break the script check
+        info.append(f"The ports were not checked against the layout ({type(e).__name__}: {e}).")
+        return
+    errors.extend(result["errors"])
+    warnings.extend(result["warnings"])
+    info.extend(result["info"])
+
+
 def check_model_script(script_path):
     script_path = os.path.abspath(script_path)
     with open(script_path, encoding="utf-8") as f:
@@ -181,6 +201,7 @@ def check_model_script(script_path):
         info.append("utilities.create_run_script(sim_path) is not called, so no run_sim script is written.")
 
     _mesh_size_check(tree, script_path, assigned, warnings, info)
+    _port_check(tree, script_path, assigned, errors, warnings, info)
 
     no_gui = assigned.get("no_gui", (0, None))[1]
     if no_gui is not True:

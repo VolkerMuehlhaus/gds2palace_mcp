@@ -36,7 +36,7 @@ cloud, so everything a tool **returns** goes to it as part of the conversation, 
 |---|---|
 | `inspect_gds` | File path, cell name, the layer numbers used, shape count per layer, bounding boxes, smallest shape side and smallest gap per layer |
 | `inspect_stackup`, `list_stackups` | The stackup contents: layer heights, materials, conductivities. For the IHP stackups that ship with gds2palace, this is public data |
-| `check_layout_complexity`, `simplify_layout` | File paths, cell names, polygon counts per layer, layout size |
+| `check_layout_complexity`, `simplify_layout`, `suggest_mesh_size`, `propose_ports`, `check_ports` | File paths, cell names, polygon counts per layer, layout size, widths, gaps and port positions |
 | `check_model_script` | The setting values in the script (frequencies, mesh sizes, ...) |
 | `generate_model` | File paths, log lines from gds2palace and gmsh, mesh size |
 | `show_in_gmsh`, `show_sparameters` | Only the file paths. The windows are shown on your screen; the assistant doesn't see them |
@@ -76,14 +76,17 @@ server helps with all three and then builds the model.
 | "Is this layout too complex for FEM?" | `check_layout_complexity` | Polygon count per layer, layout size and density, which layers dominate (e.g. via arrays, dummy fill), and what simplification would help |
 | "Remove the dummy fill and merge the via arrays" | `simplify_layout` | A simplified copy of your layout (`<name>_simplified.gds`), with polygon counts before and after. The original file is not changed |
 | "Which mesh size do I need?" | `suggest_mesh_size` | The `refined_cellsize` for an accurate and a quick model, from the narrowest traces and the smallest gaps between coupled lines on the top metal layers |
+| "Where should the ports go?" | `propose_ports`, `add_ports` | Port positions from your pins, labels or open line ends, each with a ground reference; after you confirm, a copy of the layout with the port lines |
+| "Are my ports connected?" | `check_ports` | Whether each port line lies on metal of both layers it connects, before any meshing |
 | "Write a model script for it" | (writes the file) | A gds2palace script, based on the official template |
 | "Check my script" | `check_model_script` | Typos in setting names, missing settings, port layers that are not read, outdated settings |
-| "Generate the model" | `generate_model` | The Palace input files (`config.json`, mesh, `run_sim`), the mesh size, and the warnings from meshing |
+| "Generate the model" | `generate_model` | The Palace input files (`config.json`, mesh, `run_sim`), the mesh size, an estimate of the unknowns and the peak RAM Palace will need, and the warnings from meshing |
 | "Show me the mesh" | `show_in_gmsh` | The meshed model, or the geometry before meshing, in a gmsh window on your screen |
 | "Look at the layout. Are the ports at the right place?" | `preview_layout` | The assistant sees a picture of the layout with the ports labelled P1, P2, ... IHP SG13G2 layouts get the KLayout colors; for another technology, give the stackup file, and the colors come from its materials |
 | "Did the Palace run finish, and how long did it take?" | `summarize_results` | Unknowns, mesh size, run time, peak RAM, and for adaptive mesh refinement how much S changed per iteration, for one run or a whole folder of runs |
 | "Show me S11 and S21 of result.s2p" | `show_sparameters` | The plot_snp windows (dB, phase, Smith chart) on your screen |
 | "Compare simulated.s2p with measured.s2p" | `plot_sparameters`, `sparameter_summary` | The assistant sees both curves in one plot, and gets the numbers to compare |
+| "Make a SPICE model of this inductor" | `fit_equivalent_circuit` | An equivalent circuit (Ngspice or VACASK subcircuit) with its element values, from snp2le. The assistant proposes the model type and the extraction frequency; you confirm |
 | "What is L and Q of this inductor?" | `passive_values` | L, R and Q at low frequency and at chosen frequencies, peak Q, self-resonance frequency |
 
 Some things this helps with in practice:
