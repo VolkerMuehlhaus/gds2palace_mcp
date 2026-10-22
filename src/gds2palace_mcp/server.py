@@ -14,7 +14,7 @@ from .common import Gds2palaceError
 from .layout import inspect_gds as _inspect_gds
 from .model_run import generate_model as _generate_model
 from .settings_check import check_model_script as _check_model_script
-from . import complexity, meshsize, results, sparams
+from . import circuit, complexity, meshsize, results, sparams
 from .stackup import inspect_stackup as _inspect_stackup, list_stackups as _list_stackups
 from .viewers import preview_layout as _preview_layout, show_in_gmsh as _show_in_gmsh
 
@@ -33,7 +33,8 @@ asks for it. Write the model script, starting from the template in the guide. Ru
 check_model_script, fix what it reports, then generate_model. preview_layout shows you the layout
 as an image with ports labelled; show_in_gmsh opens the model in a gmsh window for the user.
 For finished Palace runs, summarize_results gives run time, RAM, unknowns and AMR convergence.
-For results (.sNp files): sparameter_summary and passive_values give numbers, plot_sparameters
+For results (.sNp files): fit_equivalent_circuit makes a SPICE model (snp2le);
+sparameter_summary and passive_values give numbers, plot_sparameters
 gives you plots, show_sparameters opens plot windows for the user. The Palace solver runs on Linux and is not started by these tools.
 
 Ask the user for design intent (frequency range, ports, stackup, accuracy versus run time);
@@ -165,7 +166,9 @@ def check_model_script(script_path: str) -> dict:
 def generate_model(script_path: str, timeout_s: int = 1800, save_geometry: bool = False) -> dict:
     """Run a gds2palace model script (python model.py) without gmsh windows and check its output:
     config.json, mesh, port_information.json and run_sim in palace_model/<model>_data, with mesh
-    node/element counts. Meshing large layouts can take minutes. Does not run the Palace solver.
+    node/tetrahedron counts and an estimate of the Palace unknowns and peak RAM (estimate: tell the
+    user before they start Palace, especially for AMR). Meshing large layouts can take minutes.
+    Does not run the Palace solver.
 
     save_geometry: also save the unmeshed geometry (<model>.geo_unrolled) for show_in_gmsh."""
     return _generate_model(script_path, timeout_s, save_geometry)
@@ -289,6 +292,27 @@ def passive_values(file: str, device: str = "inductor", connection: str = "diffe
     plot: also return an image of L/C and Q versus frequency (sent to the assistant)."""
     result, images = sparams.passive_values(file, device, connection, frequencies_ghz, plot)
     return [json.dumps(result, indent=1)] + [Image(data=png, format="png") for png in images]
+
+
+@mcp.tool()
+@expected_errors
+def fit_equivalent_circuit(file: str, structure: str = "", universal: bool = False,
+                           fext_ghz: float | None = None, fmin_ghz: float | None = None,
+                           fmax_ghz: float | None = None, order: int | None = None, output_file: str = "",
+                           netlist_format: str = "ngspice", show_plot: bool = False) -> dict:
+    """Lumped-element equivalent circuit (SPICE subcircuit) from a Touchstone file, with snp2le
+    (https://github.com/iic-jku/snp2le, command-line mode; must be installed: pip install snp2le).
+
+    structure: a physical model, one of inductor-pi, inductor-wideband, inductor-ct (3-port),
+    mim-cap, tline-rlgc, wilkinson-inphase, wilkinson, balun (4-port), branchline (4-port).
+    universal=True instead: a vector-fit model of any network (order = max model order, default 6).
+    Propose the structure (from the device and port count) and the extraction frequency fext_ghz
+    (structure mode, default 10 GHz) to the user and let them confirm before running.
+    fmin_ghz/fmax_ghz: fit band. netlist_format: ngspice, vacask or both.
+    Writes <file>_<structure>.cir next to the input (or output_file) and returns the element values
+    and the netlist. show_plot: open snp2le's data-vs-model plot window on the user's screen."""
+    return circuit.fit_equivalent_circuit(file, structure, universal, fext_ghz, fmin_ghz, fmax_ghz, order,
+                                          output_file, netlist_format, show_plot)
 
 
 def _agents_guide():
