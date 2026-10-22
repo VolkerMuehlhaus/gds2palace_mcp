@@ -134,7 +134,7 @@ def _stackup_colors(stackup_file, variable_overrides, drawn_layers):
 
 
 def preview_layout(gds_file, cellname="", ports=None, width_px=1000, save_png="", stackup_file="",
-                   variable_overrides=None, style="auto"):
+                   variable_overrides=None, style="auto", fill_alpha=0.45, pattern_scale=1):
     """Render the layout to PNG bytes with gds_viewer, ports labelled.
 
     style "sg13g2": IHP SG13G2 colors and fill patterns (KLayout look); layers without SG13G2
@@ -145,6 +145,9 @@ def preview_layout(gds_file, cellname="", ports=None, width_px=1000, save_png=""
     ports: {port number: GDS layer}; each shape on that layer gets the label P<n> at its
     center. Without ports, shapes on the conventional port layers 201-249 are labelled
     L<layer>.
+    fill_alpha: opacity of a solid fill under the fill patterns (sg13g2 style), so that metal
+    stays visible when the image is shown small; 0 = exact KLayout look.
+    pattern_scale: thickness of fill pattern lines and outlines (sg13g2 style), 1 = KLayout.
     Returns (png bytes, summary dict).
     """
     import io
@@ -184,7 +187,8 @@ def preview_layout(gds_file, cellname="", ports=None, width_px=1000, save_png=""
 
     buffer = io.BytesIO()
     gds_viewer.render_screenshot(cell, buffer, width_px=width_px, labels=labels, outline_layers=outline,
-                                 layer_colors=layer_colors)
+                                 layer_colors=layer_colors, pattern_scale=max(1, int(pattern_scale)),
+                                 fill_alpha=fill_alpha or None)
     png = buffer.getvalue()
     if save_png:
         save_png = os.path.abspath(save_png)

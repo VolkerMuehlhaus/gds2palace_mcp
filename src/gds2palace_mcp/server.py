@@ -167,7 +167,7 @@ def show_in_gmsh(path: str, what: str = "mesh") -> dict:
 def preview_layout(gds_file: str, cellname: str = "", ports: dict[int, int] | None = None,
                    width_px: int = 1000, send_image: bool = True, save_png: str = "",
                    stackup_file: str = "", variable_overrides: dict | None = None,
-                   style: str = "auto") -> list:
+                   style: str = "auto", fill_alpha: float = 0.45, pattern_scale: int = 1) -> list:
     """Render the layout as a PNG with ports labelled, so that you can see it: check port
     positions against the feed lines, see the structure type.
 
@@ -185,11 +185,14 @@ def preview_layout(gds_file: str, cellname: str = "", ports: dict[int, int] | No
     P<n>. Without ports, shapes on layers 201-249 are labelled L<layer>. Layers without SG13G2
     style (ports, SUBGND, ...) are drawn as outlines.
     width_px: image width; 1000 is enough for an overview, larger for small details.
+    fill_alpha: opacity of a solid fill under the SG13G2 fill patterns, so that metal stays visible
+    when the image is shown small; 0 for the exact KLayout look.
+    pattern_scale: thicker pattern lines and outlines (2, 3, ...); 1 = KLayout.
     save_png: optional path to also save the PNG."""
     if not send_image and not save_png:
         raise ValueError("send_image=False needs save_png, otherwise nothing is produced.")
     png, summary = _preview_layout(gds_file, cellname, ports, width_px, save_png, stackup_file,
-                                   variable_overrides, style)
+                                   variable_overrides, style, fill_alpha, pattern_scale)
     text = json.dumps(summary, indent=1)
     return [Image(data=png, format="png"), text] if send_image else [text]
 
