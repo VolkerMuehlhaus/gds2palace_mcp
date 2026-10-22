@@ -165,9 +165,17 @@ def show_in_gmsh(path: str, what: str = "mesh") -> dict:
 @mcp.tool()
 @expected_errors
 def preview_layout(gds_file: str, cellname: str = "", ports: dict[int, int] | None = None,
-                   width_px: int = 1000, send_image: bool = True, save_png: str = "") -> list:
-    """Render the layout as a PNG with IHP SG13G2 colors and fill patterns, with ports labelled,
-    so that you can see it: check port positions against the feed lines, see the structure type.
+                   width_px: int = 1000, send_image: bool = True, save_png: str = "",
+                   stackup_file: str = "", variable_overrides: dict | None = None,
+                   style: str = "auto") -> list:
+    """Render the layout as a PNG with ports labelled, so that you can see it: check port
+    positions against the feed lines, see the structure type.
+
+    Colors: for IHP SG13G2 (no stackup_file, or an SG13... stackup) the KLayout colors and fill
+    patterns. For any other technology pass stackup_file: colors then come from the stackup
+    materials, semi-transparent and drawn bottom to top, and the result has a legend (layer, name,
+    color). style forces "sg13g2" or "stackup". Without a stackup, IHP layer numbers are assumed:
+    other technologies get misleading colors.
 
     The image is sent to the assistant, i.e. a picture of the user's design leaves their machine.
     For confidential layouts, use send_image=False with save_png: the PNG is then only saved
@@ -180,7 +188,8 @@ def preview_layout(gds_file: str, cellname: str = "", ports: dict[int, int] | No
     save_png: optional path to also save the PNG."""
     if not send_image and not save_png:
         raise ValueError("send_image=False needs save_png, otherwise nothing is produced.")
-    png, summary = _preview_layout(gds_file, cellname, ports, width_px, save_png)
+    png, summary = _preview_layout(gds_file, cellname, ports, width_px, save_png, stackup_file,
+                                   variable_overrides, style)
     text = json.dumps(summary, indent=1)
     return [Image(data=png, format="png"), text] if send_image else [text]
 

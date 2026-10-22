@@ -79,7 +79,7 @@ server helps with all three and then builds the model.
 | "Check my script" | `check_model_script` | Typos in setting names, missing settings, port layers that are not read, outdated settings |
 | "Generate the model" | `generate_model` | The Palace input files (`config.json`, mesh, `run_sim`), the mesh size, and the warnings from meshing |
 | "Show me the mesh" | `show_in_gmsh` | The meshed model, or the geometry before meshing, in a gmsh window on your screen |
-| "Look at the layout. Are the ports at the right place?" | `preview_layout` | The assistant sees a picture of the layout with the ports labelled P1, P2, ... |
+| "Look at the layout. Are the ports at the right place?" | `preview_layout` | The assistant sees a picture of the layout with the ports labelled P1, P2, ... IHP SG13G2 layouts get the KLayout colors; for another technology, give the stackup file, and the colors come from its materials |
 | "Did the Palace run finish, and how long did it take?" | `summarize_results` | Unknowns, mesh size, run time, peak RAM, and for adaptive mesh refinement how much S changed per iteration, for one run or a whole folder of runs |
 | "Show me S11 and S21 of result.s2p" | `show_sparameters` | The plot_snp windows (dB, phase, Smith chart) on your screen |
 | "Compare simulated.s2p with measured.s2p" | `plot_sparameters`, `sparameter_summary` | The assistant sees both curves in one plot, and gets the numbers to compare |
