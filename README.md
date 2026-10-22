@@ -17,7 +17,7 @@ pip install gds2palace_mcp
 ```
 
 This also installs gds2palace and its requirements (gdspy, gmsh, shapely, numpy), gds_prepare_for_EM, gds_viewer,
-plot_snp and scikit-rf. It needs gds2palace 0.9.1 or newer, the first version that ships the IHP stackup files.
+plot_snp and scikit-rf. It needs gds2palace 0.9.2 or newer, which ships the IHP stackup files and the result tools.
 
 Add the server to Claude Code, using the Python environment where it is installed:
 
@@ -46,6 +46,7 @@ For Claude Desktop and other clients, add the same command to the client's MCP s
 | `generate_model` | Runs the model script without gmsh windows and checks the output: `config.json`, mesh with node and element counts, `port_information.json`, `run_sim`. With `save_geometry`, it also saves the unmeshed geometry |
 | `show_in_gmsh` | Opens the mesh, or the unmeshed geometry, in the gmsh GUI on the user's screen |
 | `preview_layout` | The layout as an image (IHP SG13G2 colors, via [gds_viewer](https://github.com/VolkerMuehlhaus/gds_viewer)) with the ports labelled, for the assistant to look at |
+| `summarize_results` | Summary of finished Palace runs (gds2palace's palace_summary): unknowns, mesh elements, run time, peak RAM, AMR convergence (Max \|ΔS\| per iteration, optional plot), Touchstone files found, "did NOT converge" in saved logs |
 | `sparameter_summary` | Numbers from Touchstone files: ports, frequency range, passivity and reciprocity, dB minimum/maximum, dB/phase at chosen frequencies |
 | `plot_sparameters` | dB/phase plots and Smith charts as images for the assistant (via [plot_snp](https://github.com/VolkerMuehlhaus/plot_snp)), several files in one plot |
 | `show_sparameters` | Opens the interactive plot_snp windows on the user's screen |

@@ -14,7 +14,7 @@ from .common import Gds2palaceError
 from .layout import inspect_gds as _inspect_gds
 from .model_run import generate_model as _generate_model
 from .settings_check import check_model_script as _check_model_script
-from . import complexity, sparams
+from . import complexity, results, sparams
 from .stackup import inspect_stackup as _inspect_stackup, list_stackups as _list_stackups
 from .viewers import preview_layout as _preview_layout, show_in_gmsh as _show_in_gmsh
 
@@ -30,6 +30,7 @@ inspect_gds; for unknown or tape-out layouts, check_layout_complexity and, if ne
 simplify_layout. Write the model script, starting from the template in the guide. Run
 check_model_script, fix what it reports, then generate_model. preview_layout shows you the layout
 as an image with ports labelled; show_in_gmsh opens the model in a gmsh window for the user.
+For finished Palace runs, summarize_results gives run time, RAM, unknowns and AMR convergence.
 For results (.sNp files): sparameter_summary and passive_values give numbers, plot_sparameters
 gives you plots, show_sparameters opens plot windows for the user. The Palace solver runs on Linux and is not started by these tools.
 
@@ -182,6 +183,22 @@ def preview_layout(gds_file: str, cellname: str = "", ports: dict[int, int] | No
     png, summary = _preview_layout(gds_file, cellname, ports, width_px, save_png)
     text = json.dumps(summary, indent=1)
     return [Image(data=png, format="png"), text] if send_image else [text]
+
+
+@mcp.tool()
+@expected_errors
+def summarize_results(path: str, plot: bool = False) -> list:
+    """Summary of finished (or running) Palace simulations, with gds2palace's palace_summary:
+    unknowns (degrees of freedom), mesh elements, run time, peak RAM, error indicator, and for
+    adaptive mesh refinement (AMR) the change of S between iterations (Max |dS|). Also lists the
+    Touchstone files found, and counts 'did NOT converge' in log files saved in the run folder.
+
+    path: the model script, its palace_model/<model>_data folder (after the results were copied
+    back from the Linux machine), or a folder with several runs (searched recursively).
+    plot: also return the AMR convergence plot (Max |dS| per iteration) as an image.
+    Needs gds2palace 0.9.2 or newer."""
+    summary, images = results.summarize_results(path, plot)
+    return [json.dumps(summary, indent=1)] + [Image(data=png, format="png") for png in images]
 
 
 @mcp.tool()
