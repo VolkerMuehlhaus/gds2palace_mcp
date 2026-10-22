@@ -14,7 +14,7 @@ from .common import Gds2palaceError
 from .layout import inspect_gds as _inspect_gds
 from .model_run import generate_model as _generate_model
 from .settings_check import check_model_script as _check_model_script
-from . import circuit, complexity, meshsize, ports, results, sparams
+from . import circuit, complexity, holes, meshsize, ports, results, sparams
 from .stackup import inspect_stackup as _inspect_stackup, list_stackups as _list_stackups
 from .viewers import preview_layout as _preview_layout, show_in_gmsh as _show_in_gmsh
 
@@ -27,7 +27,7 @@ layout and an XML stackup file.
 Workflow: read the resource gds2palace://agents-guide first (how model scripts are written,
 settings, ports, pitfalls). Inspect the inputs with list_stackups, inspect_stackup and
 inspect_gds; for unknown or tape-out layouts, check_layout_complexity and, if needed,
-simplify_layout. Before asking the user about mesh settings, run suggest_mesh_size and propose
+simplify_layout (run measure_holes before fill_ground_holes: hole sizes are measured, not assumed). Before asking the user about mesh settings, run suggest_mesh_size and propose
 its refined_cellsize: never a larger one, also not for quick models, unless the user explicitly
 asks for it. Write the model script, starting from the template in the guide. Run
 check_model_script (includes the port check), fix what it reports, then generate_model. Without
@@ -105,21 +105,38 @@ def check_layout_complexity(gds_file: str, stackup_file: str, cellname: str = ""
 
 @mcp.tool()
 @expected_errors
+def measure_holes(gds_file: str, stackup_file: str, cellname: str = "", mincount: int = 20,
+                  variable_overrides: dict | None = None) -> dict:
+    """Measure the openings in ground planes BEFORE simplify_layout fills them: per metal layer the
+    repeated opening sizes (at least mincount of one size: cheesing, tiled meshes - holes inside
+    tiles and gaps between side-by-side tiles alike, measured on the merged layer) and the other
+    openings, which stay (circuit openings, pads). Show the result to the user; hole sizes are
+    measured, never assumed."""
+    return holes.measure_holes(gds_file, stackup_file, cellname, mincount, variable_overrides)
+
+
+@mcp.tool()
+@expected_errors
 def simplify_layout(gds_file: str, stackup_file: str, output_file: str = "", cellname: str = "",
                     remove_floating_fill: bool = False, fill_cutouts: bool = False, merge_vias: bool = False,
                     via_merge_size: float = 1.0, merge_per_layer: bool = False, fill_minsize: float = 1.0,
                     fill_maxsize: float | None = None, fill_mincount: int = 20,
-                    max_hole_area: float | None = 1.0, exclude_layers: list[int] | None = None,
-                    variable_overrides: dict | None = None) -> dict:
+                    max_hole_area: float | None = None, exclude_layers: list[int] | None = None,
+                    variable_overrides: dict | None = None, fill_ground_holes: bool = False,
+                    ground_hole_mincount: int = 20) -> dict:
     """Simplify a layout for EM simulation and write it to a new GDS file (default
     <name>_simplified.gds; the original is never changed). Same operations as setupEM's
     Tools > Simplify GDS (gds_prepare_for_EM), with metal and via layers from the stackup:
 
     remove_floating_fill: remove unconnected dummy fill (groups of at least fill_mincount pieces of
       the same size, between fill_minsize and fill_maxsize um).
-    fill_cutouts: fill small cutouts (holes) in metal, up to max_hole_area um^2 (default 1, as in
-      setupEM). None fills holes of any size, including openings that belong to the circuit, e.g.
-      inside the rings of a coupler: only with the user's explicit OK.
+    fill_ground_holes: fill the repeated openings of ground planes, measured in the layout at run
+      time (merged layers: holes inside tiles and gaps between tiles); openings of one size that
+      occur at least ground_hole_mincount times are filled, other openings (circuit openings, pads)
+      and holes outside ground planes stay. No size threshold. Run measure_holes first and show
+      the user what would be filled.
+    fill_cutouts: gds_prepare_for_EM's per-polygon cutout filling; needs an explicit max_hole_area
+      (total hole area per polygon, um^2) given by the user - never assume a value.
     merge_vias: merge vias closer than via_merge_size um that connect the same metal shapes above
       and below (never shorts different shapes).
     merge_per_layer: merge touching polygons on each metal layer.
@@ -131,7 +148,8 @@ def simplify_layout(gds_file: str, stackup_file: str, output_file: str = "", cel
     return complexity.simplify_layout(gds_file, stackup_file, output_file, cellname, remove_floating_fill,
                                       fill_cutouts, merge_vias, via_merge_size, merge_per_layer,
                                       fill_minsize, fill_maxsize, fill_mincount, max_hole_area,
-                                      exclude_layers, variable_overrides)
+                                      exclude_layers, variable_overrides, fill_ground_holes,
+                                      ground_hole_mincount)
 
 
 @mcp.tool()
