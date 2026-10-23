@@ -13,7 +13,7 @@ import layouts
 EXPECTED_TOOLS = {
     "list_stackups", "inspect_stackup", "inspect_gds", "check_layout_complexity", "measure_holes",
     "simplify_layout", "suggest_mesh_size", "check_ports", "propose_ports", "add_ports", "check_model_script",
-    "generate_model", "show_in_gmsh", "preview_layout", "summarize_results", "sparameter_summary",
+    "generate_model", "wait_for_model", "check_repeated_patterns", "show_in_gmsh", "preview_layout", "summarize_results", "sparameter_summary",
     "plot_sparameters", "show_sparameters", "passive_values", "fit_equivalent_circuit",
 }
 

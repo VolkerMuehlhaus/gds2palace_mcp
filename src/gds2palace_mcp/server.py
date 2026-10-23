@@ -14,7 +14,7 @@ from .common import Gds2palaceError
 from .layout import inspect_gds as _inspect_gds
 from .model_run import generate_model as _generate_model
 from .settings_check import check_model_script as _check_model_script
-from . import circuit, complexity, holes, meshsize, ports, results, sparams
+from . import circuit, complexity, holes, meshsize, model_run, patterns, ports, results, sparams
 from .stackup import inspect_stackup as _inspect_stackup, list_stackups as _list_stackups
 from .viewers import preview_layout as _preview_layout, show_in_gmsh as _show_in_gmsh
 
@@ -30,7 +30,11 @@ inspect_gds; for unknown or tape-out layouts, check_layout_complexity and, if ne
 simplify_layout (run measure_holes before fill_ground_holes: hole sizes are measured, not assumed). Before asking the user about mesh settings, run suggest_mesh_size and propose
 its refined_cellsize: never a larger one, also not for quick models, unless the user explicitly
 asks for it. Write the model script, starting from the template in the guide. Run
-check_model_script (includes the port check), fix what it reports, then generate_model. Without
+check_model_script (includes the port check), fix what it reports. Before generate_model, run
+check_repeated_patterns: if it recommends preprocessing, show the candidates and ask the user
+whether to simplify the layout first; don't start meshing until they decided. generate_model
+shows the meshing log live in a window on the user's screen; if it reports still_running after
+5 minutes, ask the user whether to keep waiting. Never stop a model generation. Without
 ports in the layout: propose_ports, confirm with the user, add_ports. preview_layout shows you the layout
 as an image with ports labelled; show_in_gmsh opens the model in a gmsh window for the user.
 For finished Palace runs, summarize_results gives run time, RAM, unknowns and AMR convergence.
@@ -228,15 +232,43 @@ def check_model_script(script_path: str) -> dict:
 
 @mcp.tool()
 @expected_errors
-def generate_model(script_path: str, timeout_s: int = 1800, save_geometry: bool = False) -> dict:
+def generate_model(script_path: str, timeout_s: int = 300, save_geometry: bool = False,
+                   show_log: bool = True) -> dict:
     """Run a gds2palace model script (python model.py) without gmsh windows and check its output:
     config.json, mesh, port_information.json and run_sim in palace_model/<model>_data, with mesh
     node/tetrahedron counts and an estimate of the Palace unknowns and peak RAM (estimate: tell the
-    user before they start Palace, especially for AMR). Meshing large layouts can take minutes.
-    Does not run the Palace solver.
+    user before they start Palace, especially for AMR). Does not run the Palace solver.
 
+    Run check_repeated_patterns first: if it recommends preprocessing, ask the user before meshing.
+    The output goes to <script>_generate.log; show_log (default) opens a window on the user's
+    screen that shows it live. Waits up to timeout_s (default 5 min). If meshing is still running
+    then, it keeps running and the result has still_running and a job_id: ask the user whether to
+    keep waiting (wait_for_model); don't decide that yourself. This server never stops a model
+    generation.
     save_geometry: also save the unmeshed geometry (<model>.geo_unrolled) for show_in_gmsh."""
-    return _generate_model(script_path, timeout_s, save_geometry)
+    return _generate_model(script_path, timeout_s, save_geometry, show_log)
+
+
+@mcp.tool()
+@expected_errors
+def wait_for_model(job_id: str, timeout_s: int = 300) -> dict:
+    """Keep waiting for a model generation that generate_model reported as still_running (after the user
+    said to keep waiting). Returns the full result when it finished, else the status again."""
+    return model_run.wait_for_model(job_id, timeout_s)
+
+
+@mcp.tool()
+@expected_errors
+def check_repeated_patterns(gds_file: str, stackup_file: str, cellname: str = "",
+                            mincount: int = 20, variable_overrides: dict | None = None) -> dict:
+    """Check a layout for repeated patterns BEFORE generate_model: via fields, dummy fill, tiles with
+    holes (cheesing) - the patterns that can make meshing take very long. Read from the cell
+    hierarchy without flattening (each cell inspected once, counted as often as it is placed), so it
+    is fast even for huge layouts. Returns preprocessing_candidates with the suggested simplify_layout
+    option each, and recommend_preprocessing. If preprocessing is recommended, show the candidates
+    to the user and ask whether to simplify first; don't mesh before they decided."""
+    return patterns.check_repeated_patterns(gds_file, stackup_file, cellname, mincount,
+                                            variable_overrides=variable_overrides)
 
 
 @mcp.tool()
@@ -429,8 +461,11 @@ Layout: {gds_file or '(ask me)'}. Structure: {what or '(ask me)'}.
    layers hold the ports, port type (via or in-plane), the metals they connect, polarity and
    reference impedance; which stackup (planar or conformal passivation, chip thickness);
    accuracy versus run time. Suggest values from the layout, but let me decide.
-5. Write the script from the guide's template, run check_model_script, fix, then generate_model.
-6. Report the mesh size and anything in important_lines, and how to run Palace (run_sim on Linux)."""
+5. Write the script from the guide's template, run check_model_script, fix.
+6. Run check_repeated_patterns. If it recommends preprocessing, show me the patterns and ask whether
+   to simplify the layout first. Only then generate_model (it shows me the meshing log in a
+   window); if it is still meshing after 5 minutes, ask me whether to keep waiting.
+7. Report the mesh size and anything in important_lines, and how to run Palace (run_sim on Linux)."""
 
 
 def main():

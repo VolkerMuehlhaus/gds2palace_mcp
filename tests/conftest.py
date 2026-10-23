@@ -25,6 +25,13 @@ def pcb_stackup(tmp_path_factory):
     return str(path)
 
 
+@pytest.fixture(autouse=True)
+def no_log_window(monkeypatch):
+    """generate_model opens a live log window by default: not during the tests."""
+    from gds2palace_mcp import model_run
+    monkeypatch.setattr(model_run, "open_log_window", lambda log_path, title: "test window (not opened)")
+
+
 @pytest.fixture
 def work(tmp_path):
     """A fresh working folder per test: the tools write their outputs next to their inputs."""

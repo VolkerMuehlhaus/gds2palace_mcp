@@ -3,6 +3,10 @@
 import contextlib
 import io
 import os
+import shlex
+import shutil
+import subprocess
+import sys
 
 
 class Gds2palaceError(Exception):
@@ -45,3 +49,63 @@ def read_stackup(stackup_file, variable_overrides=None):
     with captured_output():
         materials_list, dielectrics_list, metals_list = stackup_reader.read_substrate(path, variable_overrides)
     return path, materials_list, dielectrics_list, metals_list
+
+
+def has_display():
+    """Can a window open here? Windows and macOS always; Linux needs an X11 or Wayland display."""
+    return sys.platform in ("win32", "darwin") or bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+
+
+def open_window(command, cwd=None, env=None):
+    """Start a program that opens a window on the user's screen, detached from this server: it keeps
+    running after the tool call returns. Raises OSError if there is no display (Linux without X11/Wayland)."""
+    if not has_display():
+        raise OSError("No display (DISPLAY/WAYLAND_DISPLAY not set): a window can't open on this computer.")
+    options = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
+               "cwd": cwd, "env": env}
+    if sys.platform == "win32":
+        options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+    else:
+        options["start_new_session"] = True
+    return subprocess.Popen(command, **options)
+
+
+def open_log_window(log_path, title):
+    """Open a terminal window on the user's screen that shows a log file live (it keeps updating while the
+    file grows). Returns which window was opened, or raises OSError if none can be opened."""
+    if not has_display():
+        raise OSError("no display (DISPLAY/WAYLAND_DISPLAY not set)")
+    detached = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if sys.platform == "win32":
+        quote = lambda text: "'" + text.replace("'", "''") + "'"
+        command = f"$host.UI.RawUI.WindowTitle = {quote(title)}; Get-Content -LiteralPath {quote(log_path)} -Wait"
+        subprocess.Popen(["powershell", "-NoProfile", "-NoExit", "-Command", command],
+                         creationflags=subprocess.CREATE_NEW_CONSOLE, **detached)
+        return "PowerShell window"
+    tail = f"tail -n +1 -f {shlex.quote(log_path)}"
+    if sys.platform == "darwin":
+        script = 'tell application "Terminal" to do script "{}"'.format(tail.replace("\\", "\\\\").replace('"', '\\"'))
+        subprocess.Popen(["osascript", "-e", script, "-e", 'tell application "Terminal" to activate'],
+                         start_new_session=True, **detached)
+        return "Terminal window"
+    failed = []
+    for terminal in ("x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "xterm"):
+        if shutil.which(terminal) is None:
+            continue
+        if terminal == "gnome-terminal":
+            command = [terminal, "--title", title, "--", "sh", "-c", tail]
+        elif terminal == "xfce4-terminal":
+            command = [terminal, "-T", title, "-x", "sh", "-c", tail]
+        else:
+            command = [terminal, "-e", "sh", "-c", tail]
+        process = subprocess.Popen(command, start_new_session=True, **detached)
+        if terminal in ("gnome-terminal", "xfce4-terminal"):     # these hand the window to a server and exit
+            return f"{terminal} window"
+        try:                                    # tail -f never ends: a terminal that exits at once has failed
+            process.wait(timeout=1)
+            failed.append(terminal)
+        except subprocess.TimeoutExpired:
+            return f"{terminal} window"
+    if failed:
+        raise OSError(f"the terminal program closed at once ({', '.join(failed)})")
+    raise OSError("no terminal program found (x-terminal-emulator, gnome-terminal, konsole, xfce4-terminal, xterm)")

@@ -116,6 +116,36 @@ def via_array(path, columns=10, rows=10, pitch=1.4, size=0.9, hierarchical=True)
     return str(path)
 
 
+def nested_arrays(path, inner=(10, 10), outer=(3, 2), tile_holes=True, fill_datatype=None):
+    """Hierarchy with arrays: a via cell placed 10 x 10 in a BLOCK cell (with TopMetal1/TopMetal2 pads),
+    BLOCK placed 3 x 2 in TOP (600 vias); and a 20 um Metal1 tile with an 8 um hole placed 8 x 8 edge to edge
+    (64 tiles forming a plane). fill_datatype: also 50 Metal1 fill squares on that datatype (e.g. 22)."""
+    via = _new_cell("VIA")
+    via.add(gdspy.Rectangle((0, 0), (0.9, 0.9), layer=TOPVIA2))
+    block = _new_cell("BLOCK")
+    block.add(gdspy.Rectangle((0, 0), (16, 16), layer=TOPMETAL1))
+    block.add(gdspy.Rectangle((0, 0), (16, 16), layer=TOPMETAL2))
+    block.add(gdspy.CellArray(via, inner[0], inner[1], (1.4, 1.4), origin=(2, 2)))
+    tile = _new_cell("TILE")
+    if tile_holes:
+        tile.add(gdspy.boolean(gdspy.Rectangle((0, 0), (20, 20)), gdspy.Rectangle((6, 6), (14, 14)), "not", layer=METAL1))
+    else:
+        tile.add(gdspy.Rectangle((0, 0), (20, 20), layer=METAL1))
+    top = _new_cell("TOP")
+    top.add(gdspy.CellArray(block, outer[0], outer[1], (30, 30), origin=(0, 200)))
+    top.add(gdspy.CellArray(tile, 8, 8, (20, 20), origin=(0, 0)))
+    library = gdspy.GdsLibrary()
+    for cell in (top, block, via, tile):
+        library.add(cell)
+    if fill_datatype is not None:
+        fill = _new_cell("FILL")
+        fill.add(gdspy.Rectangle((0, 0), (1, 1), layer=METAL1, datatype=fill_datatype))
+        top.add(gdspy.CellArray(fill, 10, 5, (3, 3), origin=(200, 0)))
+        library.add(fill)
+    library.write_gds(str(path))
+    return str(path)
+
+
 def ground_plane_tiles(path, tiles=10, pitch=20.0, hole=8.0, missing=((3, 3), (3, 4), (4, 3), (4, 4)), slots=25):
     """Metal1 ground plane of tiles (half with a hole drawn inside, half as four strips whose opening appears
     only when merged), a 40 x 40 um circuit opening where 4 tiles are missing, and a TopMetal1 signal line with

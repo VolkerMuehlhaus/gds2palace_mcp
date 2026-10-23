@@ -36,9 +36,9 @@ cloud, so everything a tool **returns** goes to it as part of the conversation, 
 |---|---|
 | `inspect_gds` | File path, cell name, the layer numbers used, shape count per layer, bounding boxes, smallest shape side and smallest gap per layer |
 | `inspect_stackup`, `list_stackups` | The stackup contents: layer heights, materials, conductivities. For the IHP stackups that ship with gds2palace, this is public data |
-| `check_layout_complexity`, `simplify_layout`, `suggest_mesh_size`, `propose_ports`, `check_ports` | File paths, cell names, polygon counts per layer, layout size, widths, gaps and port positions |
+| `check_layout_complexity`, `check_repeated_patterns`, `simplify_layout`, `suggest_mesh_size`, `propose_ports`, `check_ports` | File paths, cell names, polygon counts per layer, layout size, widths, gaps and port positions |
 | `check_model_script` | The setting values in the script (frequencies, mesh sizes, ...) |
-| `generate_model` | File paths, log lines from gds2palace and gmsh, mesh size |
+| `generate_model`, `wait_for_model` | File paths, log lines from gds2palace and gmsh, mesh size |
 | `show_in_gmsh`, `show_sparameters` | Only the file paths. The windows are shown on your screen; the assistant doesn't see them |
 | `preview_layout` | **A picture of your layout.** This is the one tool that sends the design itself, as an image. For confidential layouts, ask for the picture to be saved locally only ("save the preview as preview.png, don't send it to yourself") |
 | `sparameter_summary`, `passive_values` | Numbers from your S-parameter files: dB values, L, Q, C, resonance frequency |
@@ -74,6 +74,7 @@ server helps with all three and then builds the model.
 | "Show me the SG13G2 stackup with a 100 µm thick chip" | `inspect_stackup` | Layers with GDS numbers and heights, materials, dielectrics, free layer numbers for ports |
 | "What is in my layout?" | `inspect_gds` | For each layer: number of shapes, size, smallest line and smallest gap, and what the layer is in the stackup (or that gds2palace ignores it) |
 | "Is this layout too complex for FEM?" | `check_layout_complexity` | Polygon count per layer, layout size and density, which layers dominate (e.g. via arrays, dummy fill), and what simplification would help |
+| "Will this mesh in reasonable time?" | `check_repeated_patterns` | The shapes that repeat many times (via fields, dummy fill, cheesed ground tiles), found from the cell hierarchy, and which simplification would reduce them. The assistant asks you before meshing a layout with many of them |
 | "Which holes are in my ground planes?" | `measure_holes` | The opening sizes that repeat many times in each ground plane (cheesing, tiled meshes), measured in your layout, and the openings that belong to the circuit and stay open |
 | "Remove the dummy fill and merge the via arrays" | `simplify_layout` | A simplified copy of your layout (`<name>_simplified.gds`), with polygon counts before and after. The original file is not changed |
 | "Which mesh size do I need?" | `suggest_mesh_size` | The `refined_cellsize` for an accurate and a quick model, from the narrowest traces and the smallest gaps between coupled lines on the top metal layers |
@@ -81,7 +82,8 @@ server helps with all three and then builds the model.
 | "Are my ports connected?" | `check_ports` | Whether each port line lies on metal of both layers it connects, before any meshing |
 | "Write a model script for it" | (writes the file) | A gds2palace script, based on the official template |
 | "Check my script" | `check_model_script` | Typos in setting names, missing settings, port layers that are not read, outdated settings |
-| "Generate the model" | `generate_model` | The Palace input files (`config.json`, mesh, `run_sim`), the mesh size, an estimate of the unknowns and the peak RAM Palace will need, and the warnings from meshing |
+| "Generate the model" | `generate_model` | The Palace input files (`config.json`, mesh, `run_sim`), the mesh size, an estimate of the unknowns and the peak RAM Palace will need, and the warnings from meshing. A terminal window on your screen shows the meshing log live |
+| "Keep waiting" | `wait_for_model` | If meshing takes longer than 5 minutes, the assistant asks you whether to keep waiting. It never stops the run; the log window shows how far it is |
 | "Show me the mesh" | `show_in_gmsh` | The meshed model, or the geometry before meshing, in a gmsh window on your screen |
 | "Look at the layout. Are the ports at the right place?" | `preview_layout` | The assistant sees a picture of the layout with the ports labelled P1, P2, ... IHP SG13G2 layouts get the KLayout colors; for another technology, give the stackup file, and the colors come from its materials |
 | "Did the Palace run finish, and how long did it take?" | `summarize_results` | Unknowns, mesh size, run time, peak RAM, and for adaptive mesh refinement how much S changed per iteration, for one run or a whole folder of runs |
@@ -123,7 +125,9 @@ are and what they connect, port impedance, which stackup, and how much accuracy 
 - **The assistant can't see the 3D model.** Ask "show me the mesh" (or "the geometry before meshing"), and the
   `show_in_gmsh` tool opens it in a gmsh window on your screen. The assistant only knows that the window opened, so
   tell it what you see. During model generation, gmsh windows are switched off so that the run doesn't stop and
-  wait.
+  wait; a terminal window shows the meshing log instead (also saved as `<script>_generate.log`).
+- **It doesn't stop a running model generation.** If meshing takes very long, the assistant asks you whether to keep
+  waiting. To end it, end the Python process yourself (Task Manager, Activity Monitor or `kill`).
 - **It doesn't know your design intent.** It can tell you that the smallest gap is 2 µm. It can't know if you care
   about 60 GHz or 160 GHz, or which pads are the ports.
 - **It doesn't guarantee correct results.** A model that meshes without errors can still be wrong (wrong stackup,
@@ -149,13 +153,25 @@ You need:
    pip install gds2palace_mcp
    ```
 
-   (On Linux/macOS: `source ~/venv/palace/bin/activate`.)
+   On Linux or macOS:
+
+   ```
+   python3 -m venv ~/venv/palace
+   source ~/venv/palace/bin/activate
+   pip install gds2palace_mcp
+   ```
 
 Then register the server with Claude Code. Give it the full path of the Python in that environment, so that it
 always uses the right one:
 
 ```
 claude mcp add gds2palace -- d:\venv\palace\Scripts\python.exe -m gds2palace_mcp.server
+```
+
+On Linux or macOS:
+
+```
+claude mcp add gds2palace -- ~/venv/palace/bin/python -m gds2palace_mcp.server
 ```
 
 Check that it works:

@@ -7,6 +7,8 @@ import subprocess
 import sys
 import tempfile
 
+from .common import open_window
+
 SNP2LE_HINT = ("snp2le is not installed in this Python environment: pip install snp2le "
                "(https://github.com/iic-jku/snp2le).")
 VALUE_RE = re.compile(r"^\s+(\S+)\s+=\s+(.+?)\s*$")
@@ -104,11 +106,6 @@ def fit_equivalent_circuit(file, structure="", universal=False, fext_ghz=None, f
         plot_args = [a for a in args if a not in ("--values", "--tolerances")]
         out_index = plot_args.index("-o")
         plot_args[out_index + 1] = os.path.join(tempfile.gettempdir(), "snp2le_plot_" + os.path.basename(output_file))
-        options = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
-        if sys.platform == "win32":
-            options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-        else:
-            options["start_new_session"] = True
-        subprocess.Popen([_snp2le(), "-b", *plot_args, "--plot"], **options)
+        open_window([_snp2le(), "-b", *plot_args, "--plot"])
         result["plot"] = "snp2le opens its data-vs-model plot window on the user's screen."
     return result

@@ -7,6 +7,8 @@ import sys
 
 import numpy as np
 
+from .common import open_window
+
 import matplotlib
 matplotlib.use("Agg")   # images only; the window for the user runs in its own process
 
@@ -133,13 +135,8 @@ def show_sparameters(files, parameters=None, smith=False, zoom=False):
         if not os.path.isfile(filename):
             raise FileNotFoundError(filename)
     args = files + [p.upper() for p in (parameters or [])] + (["-smith"] if smith else []) + (["-zoom"] if zoom else [])
-    options = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
-               "env": {k: v for k, v in os.environ.items() if k != "MPLBACKEND"}}
-    if sys.platform == "win32":
-        options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-    else:
-        options["start_new_session"] = True
-    process = subprocess.Popen([sys.executable, "-m", "plot_snp"] + args, **options)
+    env = {k: v for k, v in os.environ.items() if k != "MPLBACKEND"}     # plot_snp needs an interactive backend
+    process = open_window([sys.executable, "-m", "plot_snp"] + args, env=env)
     return {"opened": files, "arguments": args, "pid": process.pid,
             "note": "plot_snp opens its plot window(s) on the user's screen. This tool does not see them; "
                     "ask the user what they see."}

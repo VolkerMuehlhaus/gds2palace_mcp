@@ -47,8 +47,10 @@ For Claude Desktop and other clients, add the same command to the client's MCP s
 | `propose_ports` | For a layout without port shapes: port candidates from pins, labels (integer labels give the port numbers) or open trace ends, each with a reference ground (closest solid ground metal below, else SUBGND) |
 | `add_ports` | Writes a copy of the layout with the confirmed port lines on layers 201 and up, plus the `add_port` lines for the script |
 | `check_ports` | Checks the ports against the layout before meshing: via port lines on metal of both layers, in-plane ports touching metal at both ends, layer collisions, several shapes on one port layer |
+| `check_repeated_patterns` | Before meshing: repeated shapes found from the cell hierarchy without flattening (via fields, fill, tiles with holes placed as arrays), with how often each repeats, whether tiles touch, and which `simplify_layout` option would reduce them. Recommends preprocessing from 1000 repeated polygons on, so that gmsh doesn't run for hours |
 | `check_model_script` | Checks a model script without running it: settings that gds2palace doesn't read (typos such as `nogui` are silently ignored by gds2palace), missing required settings, port layers missing from the layer list, removed or legacy settings, a `refined_cellsize` larger than the layout's smallest trace width or coupled-line gap, and the port check |
-| `generate_model` | Runs the model script without gmsh windows and checks the output: `config.json`, mesh with node and element counts, `port_information.json`, `run_sim`. Estimates the Palace unknowns and peak RAM from the mesh (calibrated on 158 Palace runs). With `save_geometry`, it also saves the unmeshed geometry |
+| `generate_model` | Runs the model script without gmsh windows and checks the output: `config.json`, mesh with node and element counts, `port_information.json`, `run_sim`. Estimates the Palace unknowns and peak RAM from the mesh (calibrated on 158 Palace runs). With `save_geometry`, it also saves the unmeshed geometry. The output goes to `<script>_generate.log`, shown live in a terminal window on the user's screen. After 5 minutes it returns with `still_running`, and the assistant asks whether to keep waiting; the server never stops a run |
+| `wait_for_model` | Keeps waiting for a model generation that is still running |
 | `show_in_gmsh` | Opens the mesh, or the unmeshed geometry, in the gmsh GUI on the user's screen |
 | `preview_layout` | The layout as an image (via [gds_viewer](https://github.com/VolkerMuehlhaus/gds_viewer)) with the ports labelled, for the assistant to look at. IHP SG13G2 colors and patterns; for other technologies, colors from the stackup materials, with a legend |
 | `summarize_results` | Summary of finished Palace runs (gds2palace's palace_summary): unknowns, mesh elements, run time, peak RAM, AMR convergence (Max \|ΔS\| per iteration, optional plot), Touchstone files found, "did NOT converge" in saved logs |
@@ -80,7 +82,7 @@ The layouts, stackup and Touchstone files of the tests are generated in the test
 a ground plane, coupled lines, a tiled ground plane with openings, series R-L-C networks). Tests marked `examples`
 check the values found on the real example layouts of the gds2palace, gds_prepare_for_EM and lumpedmodel
 repositories; they run when those repositories are next to this one and are skipped otherwise. The snp2le tests
-are skipped when snp2le is not installed. GitHub runs the tests on every pull request (Windows and Linux,
+are skipped when snp2le is not installed. GitHub runs the tests on every pull request (Windows, Linux and macOS,
 Python 3.10 and 3.13).
 
 ## Notes
@@ -89,6 +91,9 @@ Python 3.10 and 3.13).
 - `generate_model` runs the script with the Python of the server's environment. If the script adds a local
   `gds2palace` folder to `sys.path`, that copy is used; the result shows which gds2palace version and file were used.
 - With the stdio transport, gds2palace's printed output is captured and returned in the tool results.
+- Windows (gmsh, plots, the live log) open on the computer where the server runs: Windows, macOS (Terminal for the
+  log), or Linux with a display (the log uses the first working terminal of x-terminal-emulator, gnome-terminal,
+  konsole, xfce4-terminal, xterm). Without a display, the tools say so and work without the window.
 
 ## License
 

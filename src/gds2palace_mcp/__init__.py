@@ -1,3 +1,3 @@
 """MCP server for gds2palace."""
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
