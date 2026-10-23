@@ -68,6 +68,21 @@ range, ports, stackup, accuracy) before writing the script.
 New to MCP? [docs/README.md](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md) explains what this can and can't do for an RFIC designer, and
 [docs/example_session.md](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/example_session.md) shows a full session with an inductor.
 
+## Tests
+
+```
+pip install -e ".[test]"
+pytest                 # fast: all tools on small layouts generated in the tests (about 6 s; 30 s with the example tests)
+pytest -m slow         # gmsh meshing and the stdio MCP protocol (about 10 s)
+```
+
+The layouts, stackup and Touchstone files of the tests are generated in the tests, with known answers (a line over
+a ground plane, coupled lines, a tiled ground plane with openings, series R-L-C networks). Tests marked `examples`
+check the values found on the real example layouts of the gds2palace, gds_prepare_for_EM and lumpedmodel
+repositories; they run when those repositories are next to this one and are skipped otherwise. The snp2le tests
+are skipped when snp2le is not installed. GitHub runs the tests on every pull request (Windows and Linux,
+Python 3.10 and 3.13).
+
 ## Notes
 
 - All paths are paths on the computer where the server runs.

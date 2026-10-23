@@ -4,3 +4,4 @@ build/
 dist/
 .venv/
 palace_model/
+.pytest_cache/
