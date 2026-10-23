@@ -278,7 +278,11 @@ def propose_ports(gds_file, stackup_file, cellname="", variable_overrides=None):
         """The boundary edge of a metal shape closest to a point (a line end next to its label)."""
         coords = np.asarray(part.exterior.coords)
         edges = [LineString([a, b]) for a, b in zip(coords[:-1], coords[1:]) if not np.allclose(a, b)]
-        return min(edges, key=lambda e: e.distance(point))
+        nearest = min(e.distance(point) for e in edges)
+        # a label near a corner is equally close to both edges there: the longer one is the end across
+        # the trace, the shorter one a chamfer or jog
+        close = [e for e in edges if e.distance(point) <= nearest + 1e-6 * size]
+        return max(close, key=lambda e: e.length)
 
     candidates = []
     # 1. pins (IHP: datatype 2 on the metal layer) and text labels on conductor layers; markings on
@@ -329,8 +333,11 @@ def propose_ports(gds_file, stackup_file, cellname="", variable_overrides=None):
             continue
         edge = nearest_edge(part, point)
         candidate = {"source": "label", "name": lb.text, "signal": conductor_layers[int(lb.layer)]}
-        if edge.length <= 0.2 * size and not part.buffer(tol).contains(point):
-            candidate["line"] = (*edge.coords[0], *edge.coords[1])     # label beside a line end
+        # a label beside a line end marks that end; a label on the metal marks the end it is close to
+        # (within one end width of it), else the shape as a whole
+        inside = part.buffer(tol).contains(point)
+        if edge.length <= 0.2 * size and (not inside or edge.distance(point) <= edge.length):
+            candidate["line"] = (*edge.coords[0], *edge.coords[1])
         else:
             candidate["bbox"] = part.bounds
         candidates.append(candidate)

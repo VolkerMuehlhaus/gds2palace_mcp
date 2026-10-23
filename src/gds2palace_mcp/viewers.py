@@ -2,8 +2,9 @@
 
 import glob
 import os
-import subprocess
 import sys
+
+from .common import open_window
 
 # the same as the 'gmsh' command of the pip gmsh package, with the server's Python
 GMSH_GUI = "import sys, gmsh; gmsh.initialize(['gmsh'] + sys.argv[1:], run=True); gmsh.finalize()"
@@ -35,24 +36,11 @@ def _find_file(path, what):
     raise FileNotFoundError(f"No {suffix} file in {model_dir}. Run generate_model first.")
 
 
-def _has_display():
-    return sys.platform in ("win32", "darwin") or bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
-
-
 def show_in_gmsh(path, what="mesh"):
     if what not in SUFFIXES:
         raise ValueError(f"what must be one of {list(SUFFIXES)}")
     filename = _find_file(path, what)
-    if not _has_display():
-        raise OSError("No display (DISPLAY is not set): gmsh can't open a window on this computer.")
-
-    options = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
-               "cwd": os.path.dirname(filename)}
-    if sys.platform == "win32":
-        options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-    else:
-        options["start_new_session"] = True
-    process = subprocess.Popen([sys.executable, "-c", GMSH_GUI, filename], **options)
+    process = open_window([sys.executable, "-c", GMSH_GUI, filename], cwd=os.path.dirname(filename))
 
     size_mb = os.path.getsize(filename) / 1e6
     return {

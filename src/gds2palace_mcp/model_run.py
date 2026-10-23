@@ -5,8 +5,11 @@ import os
 import re
 import subprocess
 import sys
+import time
+import uuid
 
 from ._run_model import MARKER, SAVE_GEOMETRY_ENV
+from .common import open_log_window
 
 TAIL_LINES = 40
 ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
@@ -91,7 +94,17 @@ def _important_lines(lines):
     return [line for line in lines if any(k in line.lower() for k in keys)][:40]
 
 
-def generate_model(script_path, timeout_s=1800, save_geometry=False):
+# meshing jobs of this server process: job id -> {"process", "log", "log_path", "script", "started", "log_window"}
+JOBS = {}
+DEFAULT_WAIT_S = 300
+FINISHED = "[gds2palace_mcp] model generation finished"
+
+
+def generate_model(script_path, timeout_s=DEFAULT_WAIT_S, save_geometry=False, show_log=True):
+    """Start the model script and wait up to timeout_s. If it is still meshing then, it keeps running and the
+    result says so (job_id): the caller asks the user whether to wait longer (wait_for_model). This server never
+    stops a running model generation. The output goes to <script>_generate.log next to the script; show_log
+    opens a window on the user's screen that shows it live."""
     script_path = os.path.abspath(script_path)
     if not os.path.isfile(script_path):
         raise FileNotFoundError(script_path)
@@ -100,16 +113,58 @@ def generate_model(script_path, timeout_s=1800, save_geometry=False):
     env.pop(SAVE_GEOMETRY_ENV, None)
     if save_geometry:
         env[SAVE_GEOMETRY_ENV] = "1"
-    try:
-        proc = subprocess.run([sys.executable, "-u", "-m", "gds2palace_mcp._run_model", script_path],
-                              cwd=os.path.dirname(script_path), env=env, stdin=subprocess.DEVNULL,
-                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                              encoding="utf-8", errors="replace", timeout=timeout_s)
-        output, returncode, timed_out = proc.stdout, proc.returncode, False
-    except subprocess.TimeoutExpired as e:
-        output = e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
-        returncode, timed_out = None, True
+    job_id = uuid.uuid4().hex[:8]
+    log_path = os.path.splitext(script_path)[0] + "_generate.log"
+    log = open(log_path, "w", encoding="utf-8", errors="replace")
+    log.write(f"[gds2palace_mcp] python {os.path.basename(script_path)} (gmsh runs without windows). This window "
+              "only shows the log: closing it does not stop the run.\n")
+    log.flush()
+    process = subprocess.Popen([sys.executable, "-u", "-m", "gds2palace_mcp._run_model", script_path],
+                               cwd=os.path.dirname(script_path), env=env, stdin=subprocess.DEVNULL,
+                               stdout=log, stderr=subprocess.STDOUT)
+    job = JOBS[job_id] = {"process": process, "log": log, "log_path": log_path, "script": script_path,
+                          "started": time.monotonic(), "log_window": None}
+    if show_log:
+        try:
+            job["log_window"] = open_log_window(log_path, f"gds2palace: {os.path.basename(script_path)}")
+        except OSError as e:
+            job["log_window"] = f"none ({e})"
+    return wait_for_model(job_id, timeout_s)
 
+
+def _read_log(path):
+    with open(path, encoding="utf-8", errors="replace") as f:
+        return f.read()
+
+
+def wait_for_model(job_id, timeout_s=DEFAULT_WAIT_S):
+    """Wait up to timeout_s more for a model generation: the full result when it finished, else its status."""
+    job = JOBS.get(job_id)
+    if job is None:
+        raise ValueError(f"No running model job '{job_id}' (it finished, or the server was restarted).")
+    try:
+        job["process"].wait(timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        elapsed = time.monotonic() - job["started"]
+        tail = [l for l in ANSI_RE.sub("", _read_log(job["log_path"])).splitlines() if not l.startswith(MARKER)]
+        return {"script": job["script"], "still_running": True, "job_id": job_id,
+                "elapsed_min": round(elapsed / 60, 1), "log_file": job["log_path"], "log_window": job["log_window"],
+                "output_tail": tail[-15:],
+                "note": (f"Model generation (meshing) has run for {elapsed / 60:.0f} min and is still running. Ask the "
+                         "user whether to keep waiting (wait_for_model). This server does not stop it; the log window "
+                         "on the user's screen shows its progress. Meshing this long usually means the layout is "
+                         "too complex: check_repeated_patterns shows what simplify_layout could reduce first.")}
+    JOBS.pop(job_id)
+    returncode = job["process"].returncode
+    job["log"].write(f"\n{FINISHED} (exit code {returncode}, {(time.monotonic() - job['started']) / 60:.1f} min)\n")
+    job["log"].close()
+    result = _model_result(job["script"], _read_log(job["log_path"]), returncode, False)
+    result["log_file"] = job["log_path"]
+    result["log_window"] = job["log_window"]
+    return result
+
+
+def _model_result(script_path, output, returncode, timed_out):
     lines = ANSI_RE.sub("", output).splitlines()
     models = [json.loads(line[len(MARKER):]) for line in lines if line.startswith(MARKER)]
     log = [line for line in lines if not line.startswith(MARKER)]

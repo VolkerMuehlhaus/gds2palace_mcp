@@ -25,6 +25,9 @@ dependencies = [
     "numpy",
 ]
 
+[project.optional-dependencies]
+test = ["pytest"]
+
 [project.urls]
 Homepage = "https://github.com/VolkerMuehlhaus/gds2palace_mcp"
 Documentation = "https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md"
@@ -37,3 +40,11 @@ version = {attr = "gds2palace_mcp.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -m 'not slow'"
+markers = [
+    "slow: meshing with gmsh and the stdio MCP protocol test (run with: pytest -m slow)",
+    "examples: needs the sibling gds2palace / gds_prepare_for_EM / lumpedmodel repositories (skipped without them)",
+]
