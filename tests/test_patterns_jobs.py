@@ -86,6 +86,7 @@ def test_long_run_keeps_running_and_waiting_longer_returns_the_result(tmp_path):
     assert done["ok"] is False and "was not called" in done["note"]      # it wrote no model
     # the log stays next to the script and ends with the finished line
     log = (tmp_path / "sleep5_generate.log").read_text(encoding="utf-8")
+    assert "closing it does not stop the run" in log.splitlines()[0]
     assert "started" in log and log.rstrip().splitlines()[-1].startswith(model_run.FINISHED + " (exit code 0")
     assert r["job_id"] not in model_run.JOBS
     with pytest.raises(ValueError, match="No running model job"):

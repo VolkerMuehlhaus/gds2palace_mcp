@@ -116,7 +116,8 @@ def generate_model(script_path, timeout_s=DEFAULT_WAIT_S, save_geometry=False, s
     job_id = uuid.uuid4().hex[:8]
     log_path = os.path.splitext(script_path)[0] + "_generate.log"
     log = open(log_path, "w", encoding="utf-8", errors="replace")
-    log.write(f"[gds2palace_mcp] python {os.path.basename(script_path)} (gmsh runs without windows)\n")
+    log.write(f"[gds2palace_mcp] python {os.path.basename(script_path)} (gmsh runs without windows). This window "
+              "only shows the log: closing it does not stop the run.\n")
     log.flush()
     process = subprocess.Popen([sys.executable, "-u", "-m", "gds2palace_mcp._run_model", script_path],
                                cwd=os.path.dirname(script_path), env=env, stdin=subprocess.DEVNULL,
