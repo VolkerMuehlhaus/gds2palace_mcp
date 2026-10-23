@@ -37,7 +37,7 @@ For Claude Desktop and other clients, add the same command to the client's MCP s
 
 | Tool | What it does |
 |---|---|
-| `list_stackups` | The IHP stackup files that ship with gds2palace (SG13G2, SG13G2 with conformal passivation, SG13CMOS5L) |
+| `list_stackups` | The IHP stackup files that ship with gds2palace (SG13G2, SG13G2 with conformal passivation, SG13CMOS5L), and the installed versions of the server, gds2palace and the packages its tools use. The server's instructions also name its own and the gds2palace version |
 | `inspect_stackup` | Variables, materials, dielectrics, layers with GDS numbers and z positions, derived layers, free port layer numbers. Accepts variable overrides such as `{"total_thickness": 100}` |
 | `inspect_gds` | Per layer: number of shapes, extent, smallest shape and smallest gap (for choosing the mesh size and via merging). With a stackup, the role of each layer, and which layers gds2palace ignores |
 | `check_layout_complexity` | Before meshing: polygon count per layer (only layers the stackup uses, without flattening the layout, so it is fast for dense fill and via arrays), layout size, polygon density, the layers that dominate, and simplification hints. A report, no pass/fail limit |

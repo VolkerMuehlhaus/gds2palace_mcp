@@ -8,6 +8,7 @@ import mcp
 import pytest
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
+import gds2palace_mcp
 import layouts
 
 EXPECTED_TOOLS = {
@@ -40,6 +41,7 @@ def test_tools_resources_prompt_and_errors_over_stdio(tmp_path, line_gds, stacku
         out["prompts"] = [p.name for p in (await session.list_prompts()).prompts]
         out["resource"] = await session.read_resource("gds2palace://stackups/README.md")
         out["stackup"] = await session.call_tool("inspect_stackup", {"stackup_file": stackup_name})
+        out["stackups"] = await session.call_tool("list_stackups", {})
         out["bad_stackup"] = await session.call_tool("inspect_stackup", {"stackup_file": "nonexistent.xml"})
         out["ports"] = await session.call_tool("check_ports", {
             "gds_file": line_gds, "stackup_file": stackup_name,
@@ -52,6 +54,10 @@ def test_tools_resources_prompt_and_errors_over_stdio(tmp_path, line_gds, stacku
 
     init, out = run(session_calls(calls))
     assert init.server_info.name == "gds2palace"
+    # the assistant sees the versions in the instructions; list_stackups gives all of them
+    assert f"gds2palace_mcp {gds2palace_mcp.__version__}, gds2palace " in init.instructions
+    versions = json.loads(out["stackups"].content[0].text)["versions"]
+    assert versions["gds2palace_mcp"] == gds2palace_mcp.__version__ and versions["gds2palace"]
     assert set(out["tools"]) == EXPECTED_TOOLS
     assert all(t.description and t.description.strip() for t in out["tools"].values())
     assert out["prompts"] == ["new_model"]

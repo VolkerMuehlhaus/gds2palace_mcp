@@ -51,6 +51,25 @@ def read_stackup(stackup_file, variable_overrides=None):
     return path, materials_list, dielectrics_list, metals_list
 
 
+PACKAGES = ("gds2palace_mcp", "gds2palace", "gmsh", "gds_prepare_for_EM", "gds_viewer", "plot_snp", "snp2le")
+
+
+def versions(packages=PACKAGES):
+    """Versions of this server, gds2palace and the packages its tools use (None if not installed). Read from
+    the modules' __version__: the package metadata of an editable install keeps the version it was installed with."""
+    import importlib
+    result = {"python": sys.version.split()[0]}
+    for package in packages:
+        try:
+            with captured_output():
+                module = importlib.import_module(package)
+        except Exception:
+            result[package] = None
+            continue
+        result[package] = str(getattr(module, "__version__", "unknown"))
+    return result
+
+
 def has_display():
     """Can a window open here? Windows and macOS always; Linux needs an X11 or Wayland display."""
     return sys.platform in ("win32", "darwin") or bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
