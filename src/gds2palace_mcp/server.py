@@ -10,7 +10,7 @@ from mcp.server.mcpserver.exceptions import ResourceError, ResourceNotFoundError
 from mcp.server.mcpserver.utilities.types import Image
 
 from . import __version__
-from .common import Gds2palaceError
+from .common import Gds2palaceError, versions
 from .layout import inspect_gds as _inspect_gds
 from .model_run import generate_model as _generate_model
 from .settings_check import check_model_script as _check_model_script
@@ -45,6 +45,9 @@ gives you plots, show_sparameters opens plot windows for the user. The Palace so
 Ask the user for design intent (frequency range, ports, stackup, accuracy versus run time);
 don't invent it. All paths are on the machine where this server runs.
 """
+VERSIONS = versions(("gds2palace_mcp", "gds2palace"))
+INSTRUCTIONS += (f"\nVersions: gds2palace_mcp {VERSIONS['gds2palace_mcp']}, gds2palace {VERSIONS['gds2palace']}, "
+                 f"Python {VERSIONS['python']} (all versions: list_stackups).\n")
 
 mcp = MCPServer("gds2palace", version=__version__, instructions=INSTRUCTIONS)
 
@@ -65,8 +68,9 @@ def expected_errors(function):
 @expected_errors
 def list_stackups() -> dict:
     """List the IHP stackup XML files that ship with gds2palace (SG13G2, SG13CMOS5L), with their
-    paths and descriptions. A model can use one of these names or a path to its own stackup file."""
-    return _list_stackups()
+    paths and descriptions. A model can use one of these names or a path to its own stackup file.
+    Also returns the installed versions of this server, gds2palace and the packages its tools use."""
+    return dict(_list_stackups(), versions=versions())
 
 
 @mcp.tool()
