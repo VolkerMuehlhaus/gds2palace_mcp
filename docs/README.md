@@ -118,10 +118,12 @@ are and what they connect, port impedance, which stackup, and how much accuracy 
 - **It reads results, it doesn't run Palace.** After you copy the results back from the Linux machine, it summarizes
   the run (`summarize_results`) and works with the Touchstone files. It can only check the Palace log for solver
   problems ("did NOT converge") if the log was saved in the run folder.
-- **It extracts L, Q and C, not full equivalent circuits.** Wideband models with substrate networks are what the
-  lumpedmodel scripts do.
-- **It doesn't edit your layout.** Ports are polygons on extra GDS layers (201, 202, ...). You draw them in KLayout,
-  or you ask the assistant to write a small Python script that adds them.
+- **It doesn't change your original layout.** `simplify_layout` and `add_ports` write a new GDS file next to it. Ports
+  are polygons on extra GDS layers (201, 202, ...); `propose_ports` only proposes via ports to ground, so draw
+  in-plane and differential ports in KLayout yourself.
+- **Equivalent circuits come from snp2le's model structures.** `fit_equivalent_circuit` fits the structures snp2le
+  offers (inductor, MIM capacitor, line, Wilkinson, balun, branch-line) or a vector fit. Check the fit with its plot
+  before you use the netlist.
 - **The assistant can't see the 3D model.** Ask "show me the mesh" (or "the geometry before meshing"), and the
   `show_in_gmsh` tool opens it in a gmsh window on your screen. The assistant only knows that the window opened, so
   tell it what you see. During model generation, gmsh windows are switched off so that the run doesn't stop and
