@@ -102,7 +102,7 @@ FINISHED = "[gds2palace_mcp] model generation finished"
 
 def generate_model(script_path, timeout_s=DEFAULT_WAIT_S, save_geometry=False, show_log=True):
     """Start the model script and wait up to timeout_s. If it is still meshing then, it keeps running and the
-    result says so (job_id): the caller asks the user whether to wait longer (wait_for_model). This server never
+    result says so (job_id): the caller asks the user whether to wait longer (wait_for_model). This MCP server never
     stops a running model generation. The output goes to <script>_generate.log next to the script; show_log
     opens a window on the user's screen that shows it live."""
     script_path = os.path.abspath(script_path)
@@ -141,7 +141,7 @@ def wait_for_model(job_id, timeout_s=DEFAULT_WAIT_S):
     """Wait up to timeout_s more for a model generation: the full result when it finished, else its status."""
     job = JOBS.get(job_id)
     if job is None:
-        raise ValueError(f"No running model job '{job_id}' (it finished, or the server was restarted).")
+        raise ValueError(f"No running model job '{job_id}' (it finished, or the MCP server was restarted).")
     try:
         job["process"].wait(timeout=timeout_s)
     except subprocess.TimeoutExpired:
@@ -151,7 +151,7 @@ def wait_for_model(job_id, timeout_s=DEFAULT_WAIT_S):
                 "elapsed_min": round(elapsed / 60, 1), "log_file": job["log_path"], "log_window": job["log_window"],
                 "output_tail": tail[-15:],
                 "note": (f"Model generation (meshing) has run for {elapsed / 60:.0f} min and is still running. Ask the "
-                         "user whether to keep waiting (wait_for_model). This server does not stop it; the log window "
+                         "user whether to keep waiting (wait_for_model). This MCP server does not stop it; the log window "
                          "on the user's screen shows its progress. Meshing this long usually means the layout is "
                          "too complex: check_repeated_patterns shows what simplify_layout could reduce first.")}
     JOBS.pop(job_id)

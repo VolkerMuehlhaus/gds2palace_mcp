@@ -51,6 +51,15 @@ def read_stackup(stackup_file, variable_overrides=None):
     return path, materials_list, dielectrics_list, metals_list
 
 
+def model_dir(path):
+    """palace_model/<model>_data folder from a model script, a _data folder or a file in it."""
+    path = os.path.abspath(path)
+    if path.endswith(".py"):
+        basename = os.path.splitext(os.path.basename(path))[0]
+        return os.path.join(os.path.dirname(path), "palace_model", f"{basename}_data")
+    return path if os.path.isdir(path) else os.path.dirname(path)
+
+
 PACKAGES = ("gds2palace_mcp", "gds2palace", "gmsh", "gds_prepare_for_EM", "gds_viewer", "plot_snp", "snp2le")
 
 
@@ -89,19 +98,22 @@ def open_window(command, cwd=None, env=None):
     return subprocess.Popen(command, **options)
 
 
-def open_log_window(log_path, title):
+def open_log_window(log_path, title, command=None):
     """Open a terminal window on the user's screen that shows a log file live (it keeps updating while the
-    file grows). Returns which window was opened, or raises OSError if none can be opened."""
+    file grows). command: a program (argument list) that prints the log instead, e.g. ssh ... tail -F for a
+    log on another computer. Returns which window was opened, or raises OSError if none can be opened."""
     if not has_display():
         raise OSError("no display (DISPLAY/WAYLAND_DISPLAY not set)")
     detached = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
     if sys.platform == "win32":
         quote = lambda text: "'" + text.replace("'", "''") + "'"
-        command = f"$host.UI.RawUI.WindowTitle = {quote(title)}; Get-Content -LiteralPath {quote(log_path)} -Wait"
-        subprocess.Popen(["powershell", "-NoProfile", "-NoExit", "-Command", command],
+        show = (f"& {' '.join(quote(c) for c in command)}" if command
+                else f"Get-Content -LiteralPath {quote(log_path)} -Wait")
+        subprocess.Popen(["powershell", "-NoProfile", "-NoExit", "-Command",
+                          f"$host.UI.RawUI.WindowTitle = {quote(title)}; {show}"],
                          creationflags=subprocess.CREATE_NEW_CONSOLE, **detached)
         return "PowerShell window"
-    tail = f"tail -n +1 -f {shlex.quote(log_path)}"
+    tail = shlex.join(command) if command else f"tail -n +1 -f {shlex.quote(log_path)}"
     if sys.platform == "darwin":
         script = 'tell application "Terminal" to do script "{}"'.format(tail.replace("\\", "\\\\").replace('"', '\\"'))
         subprocess.Popen(["osascript", "-e", script, "-e", 'tell application "Terminal" to activate'],

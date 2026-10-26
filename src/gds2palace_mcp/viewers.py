@@ -4,21 +4,12 @@ import glob
 import os
 import sys
 
-from .common import open_window
+from .common import model_dir as _model_dir, open_window
 
 # the same as the 'gmsh' command of the pip gmsh package, with the server's Python
 GMSH_GUI = "import sys, gmsh; gmsh.initialize(['gmsh'] + sys.argv[1:], run=True); gmsh.finalize()"
 
 SUFFIXES = {"mesh": ".msh", "geometry": ".geo_unrolled"}
-
-
-def _model_dir(path):
-    """<model>_data folder from a model script, a _data folder or a file in it."""
-    path = os.path.abspath(path)
-    if path.endswith(".py"):
-        basename = os.path.splitext(os.path.basename(path))[0]
-        return os.path.join(os.path.dirname(path), "palace_model", f"{basename}_data")
-    return path if os.path.isdir(path) else os.path.dirname(path)
 
 
 def _find_file(path, what):

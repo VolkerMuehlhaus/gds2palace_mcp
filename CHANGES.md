@@ -3,6 +3,34 @@
 Weekly summary of changes to gds2palace_mcp, newest week first. Versions are
 those of the package (`gds2palace_mcp.__version__`).
 
+## Week of 2026-10-26 (0.6.0)
+
+### Running Palace (issue #1)
+
+- **Targets file:** the user lists where Palace may run in `~/.gds2palace_mcp/targets.toml`
+  (`GDS2PALACE_MCP_TARGETS` for another path): simulation servers (ssh), and the local machine (WSL on Windows, or
+  Linux). The tools only take a target name; hosts, folders and commands come from this file.
+- **New tools:** `list_targets` (with `check`: reachable, run command found, RAM, Palace processes
+  running there), `submit_simulation`, `simulation_status` and `fetch_results`.
+- **Submit:** copies mesh, config and port information to the simulation server into a private folder of its own
+  per run (`<remote_dir>/<user>/<project>/<model>_<job id>`, mode 700), starts the target's `run_palace`
+  detached, and shows the log live in a terminal window. The RAM estimate is compared with the free RAM.
+  A single-user target refuses to start while Palace runs there.
+- **Status:** queued, running, finished, failed or stopped; port, frequency step and AMR iteration from
+  the log, the run's own Palace processes and RAM (found by the job id in their environment, so other
+  users' runs are never counted as ours), and others' runs as counts and user names only. Works after a
+  restart: each run is recorded in `mcp_palace_job.json` in the model folder.
+- **Fetch:** copies the results back (paraview field dumps only on request), makes the Touchstone files
+  with gds2palace's `combine_extend_snp` on this computer, and returns the run summary. The run
+  folder on the simulation server is deleted only with `delete_remote=True`.
+- **Shared simulation servers:** `shared = true` for one with gds2palace's new `run_palace_shared` (a `flock`
+  slot queue for all users, also for runs from setupEM or a terminal); the MCP server checks that it is
+  installed and reports waiting runs as queued.
+- Tested on WSL (Palace 0.16) and on two Linux simulation servers over ssh (Palace 0.18): the fetched S-parameters
+  of the same line model agree within 0.0013 dB.
+- `docs/README.md`: new section "Running Palace"; "Where your data goes" and "What it can't do" updated.
+- New dependency `tomli` on Python 3.10 (3.11 and newer read TOML themselves).
+
 ## Week of 2026-10-19 (0.1.0 to 0.5.0)
 
 First week of the project: from a first read-only server to a tool set that
@@ -44,7 +72,7 @@ analysis.
   tetrahedra and estimates the Palace unknowns and the peak RAM per element
   order and coarse solve type, calibrated on runs in the gds2palace repo.
 - **Long meshing runs (0.5.0, 10-23):** `generate_model` waits 5 minutes and
-  then returns `still_running`; `wait_for_model` keeps waiting. The server never
+  then returns `still_running`; `wait_for_model` keeps waiting. The MCP server never
   stops a model generation. The meshing log goes to `<script>_generate.log` and
   is shown live in a terminal window, whose first line says that closing it does
   not stop the run.
@@ -91,9 +119,9 @@ analysis.
 - **CI and platforms (0.5.0, 10-23):** GitHub Actions on Windows, Linux and
   macOS. Windows open through one helper with a display check; setup docs for
   Linux and macOS.
-- **Versions (10-23):** the server instructions name the gds2palace_mcp and
+- **Versions (10-23):** the MCP server's instructions name the gds2palace_mcp and
   gds2palace versions, and `list_stackups` returns the versions of all packages
-  the tools use, so the assistant can tell which server it is talking to.
+  the tools use, so the assistant can tell which MCP server it is talking to.
 - **Docs and packaging (10-20, 10-21):** guide for RFIC designers new to MCP
   (`docs/README.md`), example inductor session (`docs/example_session.md`), data
   flow and deny rules for layout and mesh reads, README banner, PyPI project URLs

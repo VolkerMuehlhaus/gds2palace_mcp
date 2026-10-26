@@ -27,9 +27,10 @@ def pcb_stackup(tmp_path_factory):
 
 @pytest.fixture(autouse=True)
 def no_log_window(monkeypatch):
-    """generate_model opens a live log window by default: not during the tests."""
-    from gds2palace_mcp import model_run
+    """generate_model and submit_simulation open a live log window by default: not during the tests."""
+    from gds2palace_mcp import model_run, palace_run
     monkeypatch.setattr(model_run, "open_log_window", lambda log_path, title: "test window (not opened)")
+    monkeypatch.setattr(palace_run, "open_log_window", lambda log_path, title, command=None: "test window (not opened)")
 
 
 @pytest.fixture
