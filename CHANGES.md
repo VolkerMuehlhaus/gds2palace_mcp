@@ -3,7 +3,27 @@
 Weekly summary of changes to gds2palace_mcp, newest week first. Versions are
 those of the package (`gds2palace_mcp.__version__`).
 
-## Week of 2026-10-26 (0.6.0)
+## Week of 2026-10-26 (0.6.0 to 0.7.0)
+
+### Mixed-mode S-parameters and network operations (0.7.0, issue #2)
+
+- **New tool `transform_sparameters`:** writes a new Touchstone file (the input is never changed) and
+  returns how its ports relate to the input's, so that `sparameter_summary`, `plot_sparameters`,
+  `passive_values` and `fit_equivalent_circuit` work on the result.
+- **`mixed_mode`:** differential and common-mode S-parameters for the given port pairs, e.g. `[[1, 3],
+  [2, 4]]` for a differential line or `[[2, 3]]` for a balun with single-ended port 1. The result names
+  each parameter in mixed-mode notation (file S21 → Sdd21 or Sds21), and gives transmission, reflection,
+  mode conversion and the common-mode rejection (CMRR) per pair. Reference impedances: differential
+  2 × z0, common mode z0 / 2.
+- **`renormalize`** (one z0 or one per port), **`terminate`** (ports closed with ohm, open or short, the
+  others renumbered) and **`cascade`** (two 2-ports; a second file on other frequency points is
+  interpolated, one that doesn't cover the range is refused).
+- Files with different reference impedances per port are written as Touchstone 2.0 (`[Reference]`).
+- Checked on the D-band balun of the gds2palace mesh convergence study: power is conserved between the
+  single-ended and mixed-mode forms to 1e-15, and the CMRR equals |S21 − S31| / |S21 + S31| computed
+  directly.
+- Needs scikit-rf 2.2.0: it fixes `innerconnect` (used to terminate and cascade), which in 2.1 kept the
+  wrong S-parameter definition label for power-wave networks.
 
 ### Running Palace (issue #1)
 

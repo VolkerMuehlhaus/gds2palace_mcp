@@ -64,6 +64,7 @@ For Claude Desktop and other clients, add the same command to the client's MCP s
 | `plot_sparameters` | dB/phase plots and Smith charts as images for the assistant (via [plot_snp](https://github.com/VolkerMuehlhaus/plot_snp)), several files in one plot |
 | `show_sparameters` | Opens the interactive plot_snp windows on the user's screen |
 | `fit_equivalent_circuit` | SPICE equivalent circuit (Ngspice/VACASK) from a Touchstone file with [snp2le](https://github.com/iic-jku/snp2le) in command-line mode: inductor, MIM capacitor, line, Wilkinson, balun, branch-line structures or a universal vector fit. Needs `pip install snp2le` |
+| `transform_sparameters` | Writes a new Touchstone file (the input stays unchanged) and returns how its ports relate to the input's: `mixed_mode` (differential and common-mode S-parameters for given port pairs, with mixed-mode names such as S21 → Sdd21, mode conversion and CMRR), `renormalize` (new reference impedance, per port if needed), `terminate` (close ports with ohm, open or short), `cascade` (two 2-ports). The other S-parameter tools then work on the new file |
 | `passive_values` | L or C, R and Q of an inductor or capacitor (differential, single-ended or series), peak Q, self-resonance frequency, optional L/Q plot |
 
 Resources: `gds2palace://agents-guide` (gds2palace's [AGENTS.md](https://github.com/VolkerMuehlhaus/gds2palace_ihp_sg13g2/blob/main/AGENTS.md):
