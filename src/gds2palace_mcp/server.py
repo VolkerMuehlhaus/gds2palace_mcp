@@ -14,7 +14,7 @@ from .common import Gds2palaceError, versions
 from .layout import inspect_gds as _inspect_gds
 from .model_run import generate_model as _generate_model
 from .settings_check import check_model_script as _check_model_script
-from . import circuit, complexity, holes, meshsize, model_run, patterns, ports, results, sparams
+from . import circuit, complexity, holes, meshsize, model_run, palace_run, patterns, ports, results, sparams
 from .stackup import inspect_stackup as _inspect_stackup, list_stackups as _list_stackups
 from .viewers import preview_layout as _preview_layout, show_in_gmsh as _show_in_gmsh
 
@@ -37,13 +37,18 @@ shows the meshing log live in a window on the user's screen; if it reports still
 5 minutes, ask the user whether to keep waiting. Never stop a model generation. Without
 ports in the layout: propose_ports, confirm with the user, add_ports. preview_layout shows you the layout
 as an image with ports labelled; show_in_gmsh opens the model in a gmsh window for the user.
+Running Palace: if the user configured targets (list_targets), submit_simulation runs the model
+on one of them (a simulation server over ssh, or WSL/local Linux), only after the user agreed to the target and
+the RAM estimate; simulation_status shows its progress, fetch_results copies the results back,
+makes the Touchstone files and summarizes the run. Never stop a run. Without targets, the user
+runs run_sim on their Linux machine as before.
 For finished Palace runs, summarize_results gives run time, RAM, unknowns and AMR convergence.
 For results (.sNp files): fit_equivalent_circuit makes a SPICE model (snp2le);
 sparameter_summary and passive_values give numbers, plot_sparameters
-gives you plots, show_sparameters opens plot windows for the user. The Palace solver runs on Linux and is not started by these tools.
+gives you plots, show_sparameters opens plot windows for the user.
 
 Ask the user for design intent (frequency range, ports, stackup, accuracy versus run time);
-don't invent it. All paths are on the machine where this server runs.
+don't invent it. All paths are on the machine where this MCP server runs.
 """
 VERSIONS = versions(("gds2palace_mcp", "gds2palace"))
 INSTRUCTIONS += (f"\nVersions: gds2palace_mcp {VERSIONS['gds2palace_mcp']}, gds2palace {VERSIONS['gds2palace']}, "
@@ -69,7 +74,7 @@ def expected_errors(function):
 def list_stackups() -> dict:
     """List the IHP stackup XML files that ship with gds2palace (SG13G2, SG13CMOS5L), with their
     paths and descriptions. A model can use one of these names or a path to its own stackup file.
-    Also returns the installed versions of this server, gds2palace and the packages its tools use."""
+    Also returns the installed versions of this MCP server, gds2palace and the packages its tools use."""
     return dict(_list_stackups(), versions=versions())
 
 
@@ -241,13 +246,14 @@ def generate_model(script_path: str, timeout_s: int = 300, save_geometry: bool =
     """Run a gds2palace model script (python model.py) without gmsh windows and check its output:
     config.json, mesh, port_information.json and run_sim in palace_model/<model>_data, with mesh
     node/tetrahedron counts and an estimate of the Palace unknowns and peak RAM (estimate: tell the
-    user before they start Palace, especially for AMR). Does not run the Palace solver.
+    user before they start Palace, especially for AMR). Does not run the Palace solver: that is
+    submit_simulation's job.
 
     Run check_repeated_patterns first: if it recommends preprocessing, ask the user before meshing.
     The output goes to <script>_generate.log; show_log (default) opens a window on the user's
     screen that shows it live. Waits up to timeout_s (default 5 min). If meshing is still running
     then, it keeps running and the result has still_running and a job_id: ask the user whether to
-    keep waiting (wait_for_model); don't decide that yourself. This server never stops a model
+    keep waiting (wait_for_model); don't decide that yourself. This MCP server never stops a model
     generation.
     save_geometry: also save the unmeshed geometry (<model>.geo_unrolled) for show_in_gmsh."""
     return _generate_model(script_path, timeout_s, save_geometry, show_log)
@@ -324,14 +330,73 @@ def preview_layout(gds_file: str, cellname: str = "", ports: dict[int, int] | No
 
 @mcp.tool()
 @expected_errors
+def list_targets(check: bool = False) -> dict:
+    """The computers where submit_simulation may run Palace, as the user configured them in their
+    targets file (~/.gds2palace_mcp/targets.toml): simulation servers (ssh) and the local machine (WSL on
+    Windows, Linux). Without that file, Palace isn't run by these tools: the user runs run_sim on
+    their Linux machine as before.
+
+    check: also connect to each target: reachable, run command found, RAM, and the Palace processes
+    running there now (counts and user names). A target with shared = true queues runs of several
+    users; a target without it is for one user and refuses to start while Palace runs there."""
+    return palace_run.list_targets(check)
+
+
+@mcp.tool()
+@expected_errors
+def submit_simulation(path: str, target: str = "", overwrite: bool = False, show_log: bool = True) -> dict:
+    """Run Palace for a generated model on a target from list_targets. Returns at once; the run takes
+    minutes to hours.
+
+    BEFORE calling it, tell the user which target, the unknowns and RAM estimate from
+    generate_model, and, for an ssh target, that the mesh and config.json are copied to that
+    computer; submit only after the user agreed. Never pick a target the user didn't name when
+    several are configured.
+
+    path: the model script or its palace_model/<model>_data folder (after generate_model).
+    target: a target name from list_targets (may be left empty when only one is configured).
+    overwrite: replace the results of an earlier run of this model (ask the user first).
+    show_log: open a window on the user's screen that shows the Palace log live.
+    On a shared target the run waits in the simulation server's queue until a slot is free. This MCP server never
+    stops a run; the result says how the user can."""
+    return palace_run.submit_simulation(path, target, overwrite, show_log)
+
+
+@mcp.tool()
+@expected_errors
+def simulation_status(path: str) -> dict:
+    """State of a run started with submit_simulation: queued (waiting for a slot on a shared simulation server),
+    running, finished, failed or stopped; progress from the Palace log (MPI processes, port n/m,
+    frequency step, AMR iteration), RAM of the run, 'did NOT converge' lines, the last log lines, and
+    the Palace processes of others on the target (counts and user names).
+    path: the model script or its palace_model/<model>_data folder."""
+    return palace_run.simulation_status(path)
+
+
+@mcp.tool()
+@expected_errors
+def fetch_results(path: str, include_fields: bool = False, partial: bool = False,
+                  delete_remote: bool = False) -> dict:
+    """After a run finished: copy its results back from an ssh target into
+    palace_model/<model>_data (the log is saved there as palace.log), make the Touchstone files
+    (combine_snp) and return the summarize_results summary.
+
+    include_fields: also copy the paraview field dumps (large).
+    partial: copy what is there while the run still goes (e.g. finished AMR iterations).
+    delete_remote: delete the run folder on the ssh target afterwards - only when the user asks."""
+    return palace_run.fetch_results(path, include_fields, partial, delete_remote)
+
+
+@mcp.tool()
+@expected_errors
 def summarize_results(path: str, plot: bool = False) -> list:
     """Summary of finished (or running) Palace simulations, with gds2palace's palace_summary:
     unknowns (degrees of freedom), mesh elements, run time, peak RAM, error indicator, and for
     adaptive mesh refinement (AMR) the change of S between iterations (Max |dS|). Also lists the
     Touchstone files found, and counts 'did NOT converge' in log files saved in the run folder.
 
-    path: the model script, its palace_model/<model>_data folder (after the results were copied
-    back from the Linux machine), or a folder with several runs (searched recursively).
+    path: the model script, its palace_model/<model>_data folder (with the results in it: fetched
+    by fetch_results, or copied back by the user), or a folder with several runs (searched recursively).
     plot: also return the AMR convergence plot (Max |dS| per iteration) as an image.
     Needs gds2palace 0.9.2 or newer."""
     summary, images = results.summarize_results(path, plot)
@@ -469,7 +534,9 @@ Layout: {gds_file or '(ask me)'}. Structure: {what or '(ask me)'}.
 6. Run check_repeated_patterns. If it recommends preprocessing, show me the patterns and ask whether
    to simplify the layout first. Only then generate_model (it shows me the meshing log in a
    window); if it is still meshing after 5 minutes, ask me whether to keep waiting.
-7. Report the mesh size and anything in important_lines, and how to run Palace (run_sim on Linux)."""
+7. Report the mesh size, the unknowns and RAM estimate, and anything in important_lines.
+8. Running Palace: if list_targets shows targets, ask me which one and whether to submit_simulation
+   now; otherwise tell me how to run Palace (run_sim on Linux)."""
 
 
 def main():

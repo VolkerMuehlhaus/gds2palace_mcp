@@ -16,7 +16,7 @@ type tool names or commands yourself.
 
 Three things are useful to know:
 
-- **The tools run on your computer**, in your Python environment, on your files. The server doesn't upload your
+- **The tools run on your computer**, in your Python environment, on your files. The MCP server doesn't upload your
   layout anywhere. The assistant itself is a cloud service, though: what a tool returns (layer statistics, file
   paths, log lines) is sent to it as part of the conversation, like anything else you type or paste.
 - **You approve tool calls.** The first time the assistant wants to use a tool, it asks you. You can allow it once
@@ -28,9 +28,11 @@ Three things are useful to know:
 
 Your files stay on your computer. Facts taken from them, and pictures you ask for, don't.
 
-The server reads and writes your GDSII file, the mesh, the Palace input files and your S-parameter files on your own
-disk. It never uploads them, and no tool returns polygon coordinates or mesh contents. But the assistant runs in the
-cloud, so everything a tool **returns** goes to it as part of the conversation, including images:
+The MCP server reads and writes your GDSII file, the mesh, the Palace input files and your S-parameter files on your own
+disk. No tool returns polygon coordinates or mesh contents. It copies files to another computer only if you run Palace
+on a simulation server that you configured yourself (see [Running Palace](#running-palace)): then the mesh, `config.json`
+and `port_information.json` go to that simulation server, and the results come back. But the assistant runs in the cloud, so
+everything a tool **returns** goes to it as part of the conversation, including images:
 
 | Tool | What the assistant receives |
 |---|---|
@@ -43,6 +45,7 @@ cloud, so everything a tool **returns** goes to it as part of the conversation, 
 | `preview_layout` | **A picture of your layout.** This is the one tool that sends the design itself, as an image. For confidential layouts, ask for the picture to be saved locally only ("save the preview as preview.png, don't send it to yourself") |
 | `sparameter_summary`, `passive_values` | Numbers from your S-parameter files: dB values, L, Q, C, resonance frequency |
 | `plot_sparameters`, `passive_values` with plot | Plots of your S-parameters or of L and Q, as images. Like the layout picture, they can be saved locally only |
+| `list_targets`, `submit_simulation`, `simulation_status`, `fetch_results` | Your target names and the names of your simulation servers, file paths, RAM, the last lines of the Palace log, and how many Palace processes other users run on the simulation server, with their user names (never their files or model names) |
 
 Apart from the layout picture, this is a coarse fingerprint of a design (size, layers, smallest features, performance
 numbers), not the design itself.
@@ -57,7 +60,7 @@ Two things outside these tools also send data:
   { "permissions": { "deny": ["Read(**/*.gds)", "Read(**/*.gds2)", "Read(**/*.oas)", "Read(**/*.msh)"] } }
   ```
 
-- **The guide download.** If gds2palace is installed without its repository, the server downloads the gds2palace
+- **The guide download.** If gds2palace is installed without its repository, the MCP server downloads the gds2palace
   guide (AGENTS.md) from GitHub. This request sends nothing about your design.
 
 How long conversations are kept, and whether they may be used for training, depends on your Claude plan and its data
@@ -66,7 +69,7 @@ settings. Check them before you work on confidential designs.
 ## What you can do with it
 
 The gds2palace workflow needs three inputs: a GDSII layout, an XML stackup file and a Python model script. The
-server helps with all three and then builds the model.
+MCP server helps with all three and then builds the model.
 
 | You ask | Tool the assistant uses | What you get |
 |---|---|---|
@@ -86,6 +89,10 @@ server helps with all three and then builds the model.
 | "Keep waiting" | `wait_for_model` | If meshing takes longer than 5 minutes, the assistant asks you whether to keep waiting. It never stops the run; the log window shows how far it is |
 | "Show me the mesh" | `show_in_gmsh` | The meshed model, or the geometry before meshing, in a gmsh window on your screen |
 | "Look at the layout. Are the ports at the right place?" | `preview_layout` | The assistant sees a picture of the layout with the ports labelled P1, P2, ... IHP SG13G2 layouts get the KLayout colors; for another technology, give the stackup file, and the colors come from its materials |
+| "Where can I run Palace?" | `list_targets` | The computers you configured for Palace (see [Running Palace](#running-palace)), and whether they are reachable and free |
+| "Run it on the simulation server" | `submit_simulation` | Palace starts on that computer; a terminal window on your screen shows its log live. The assistant tells you the RAM estimate and asks you first |
+| "How far is the simulation?" | `simulation_status` | Queued, running, finished or failed; which port, frequency and AMR iteration Palace is at, its RAM, and the last log lines |
+| "Get the results" | `fetch_results` | The results copied back into the model folder, the Touchstone files (`combine_snp`) and the run summary |
 | "Did the Palace run finish, and how long did it take?" | `summarize_results` | Unknowns, mesh size, run time, peak RAM, and for adaptive mesh refinement how much S changed per iteration, for one run or a whole folder of runs |
 | "Show me S11 and S21 of result.s2p" | `show_sparameters` | The plot_snp windows (dB, phase, Smith chart) on your screen |
 | "Compare simulated.s2p with measured.s2p" | `plot_sparameters`, `sparameter_summary` | The assistant sees both curves in one plot, and gets the numbers to compare |
@@ -113,15 +120,18 @@ are and what they connect, port impedance, which stackup, and how much accuracy 
 
 ## What it can't do
 
-- **It doesn't run the Palace solver.** Palace runs on Linux. After `generate_model`, you run `run_sim` on your Linux
-  machine (or WSL, or a remote server), as before. A later version may send jobs to a simulation server.
-- **It reads results, it doesn't run Palace.** After you copy the results back from the Linux machine, it summarizes
-  the run (`summarize_results`) and works with the Touchstone files. It can only check the Palace log for solver
-  problems ("did NOT converge") if the log was saved in the run folder.
-- **It extracts L, Q and C, not full equivalent circuits.** Wideband models with substrate networks are what the
-  lumpedmodel scripts do.
-- **It doesn't edit your layout.** Ports are polygons on extra GDS layers (201, 202, ...). You draw them in KLayout,
-  or you ask the assistant to write a small Python script that adds them.
+- **It runs Palace only where you allowed it.** Palace runs on Linux: on a simulation server (over ssh) or in WSL/Linux on your own
+  computer, as listed in your targets file (see [Running Palace](#running-palace)). Without that file, you run
+  `run_sim` on your Linux machine as before, and the MCP server summarizes the results you copy back.
+- **It doesn't stop a Palace run.** To end one, end its processes yourself (`kill` on the simulation server).
+- **It is no batch system.** A simulation server for one user refuses a second run while one is going. A
+  simulation server that several people share needs `run_palace_shared` from gds2palace, which queues all runs (see below).
+- **It doesn't change your original layout.** `simplify_layout` and `add_ports` write a new GDS file next to it. Ports
+  are polygons on extra GDS layers (201, 202, ...); `propose_ports` only proposes via ports to ground, so draw
+  in-plane and differential ports in KLayout yourself.
+- **Equivalent circuits come from snp2le's model structures.** `fit_equivalent_circuit` fits the structures snp2le
+  offers (inductor, MIM capacitor, line, Wilkinson, balun, branch-line) or a vector fit. Check the fit with its plot
+  before you use the netlist.
 - **The assistant can't see the 3D model.** Ask "show me the mesh" (or "the geometry before meshing"), and the
   `show_in_gmsh` tool opens it in a gmsh window on your screen. The assistant only knows that the window opened, so
   tell it what you see. During model generation, gmsh windows are switched off so that the run doesn't stop and
@@ -133,7 +143,7 @@ are and what they connect, port impedance, which stackup, and how much accuracy 
 - **It doesn't guarantee correct results.** A model that meshes without errors can still be wrong (wrong stackup,
   wrong port, mesh too coarse). Compare with something you know: a measured device, the resistance of a line, the
   value of a capacitor.
-- **It only sees your own computer.** Paths in the conversation are paths on the computer where the server runs.
+- **It only sees your own computer.** Paths in the conversation are paths on the computer where the MCP server runs.
 - **It is for gds2palace (Palace and Elmer) only**, not for openEMS.
 
 ## Setup
@@ -143,7 +153,7 @@ You need:
 1. **Python 3.10 or newer.**
 2. **An MCP-capable assistant.** These instructions use [Claude Code](https://claude.com/claude-code), which runs in
    a terminal or in VS Code. Claude Desktop and other MCP clients work too; their documentation explains where to
-   add a server.
+   add an MCP server.
 3. **gds2palace_mcp.** Install it with pip, ideally in a virtual environment. This also installs gds2palace and
    everything it needs:
 
@@ -161,7 +171,7 @@ You need:
    pip install gds2palace_mcp
    ```
 
-Then register the server with Claude Code. Give it the full path of the Python in that environment, so that it
+Then register the MCP server with Claude Code. Give it the full path of the Python in that environment, so that it
 always uses the right one:
 
 ```
@@ -188,6 +198,155 @@ gds2palace: d:\venv\palace\Scripts\python.exe -m gds2palace_mcp.server - ✓ Con
 
 Inside a Claude Code session, the command `/mcp` shows the same list, and lets you see the tools of each server.
 
+## Running Palace
+
+Palace needs Linux. The MCP server can start it for you on a Linux computer, watch it, and copy the results back.
+That computer is a **simulation server** that you reach with ssh, or WSL/Linux on your own computer. You decide
+which computers it may use: the MCP server only runs Palace on the targets in a small text file that you write.
+The assistant can only choose a target by its name; it can never send your model anywhere else.
+
+The file is `~/.gds2palace_mcp/targets.toml` (on Windows `C:\Users\<you>\.gds2palace_mcp\targets.toml`). To keep it
+elsewhere, set the environment variable `GDS2PALACE_MCP_TARGETS` to its path. Each target is one section:
+
+```toml
+# a Linux simulation server, over ssh
+[targets.simserver]
+type = "ssh"
+host = "simserver"                  # name from ~/.ssh/config, or user@host
+description = "16 cores, 128 GB"
+
+# WSL on this Windows computer (or this computer itself, on Linux)
+[targets.wsl]
+type = "local"
+```
+
+| Option | For | Default | Meaning |
+|---|---|---|---|
+| `type` | all | (needed) | `"ssh"` for a simulation server, `"local"` for WSL on Windows or this Linux computer |
+| `host` | ssh | (needed) | The simulation server, as `ssh` knows it |
+| `run_command` | all | `"run_palace {config}"` | How Palace starts in the run folder. `{config}` is the config file. The default uses the `run_palace` that the gds2palace installers set up |
+| `remote_dir` | ssh | `"palace_runs/mcp"` | Where the runs go on the simulation server, relative to your home folder |
+| `wsl_distro` | local | the default distribution | The WSL distribution, e.g. `"Ubuntu-24.04"` |
+| `shared` | all | `false` | `true` for a simulation server that several people use (see below) |
+| `description` | all | | A note that the assistant sees, e.g. the size of the machine |
+
+What the targets need:
+
+- **Palace on the target**, started by `run_command`. The number of processes and the container are set there (in
+  `run_palace`), not in the targets file.
+- **For ssh: login without a password** (an ssh key). The MCP server never answers a password prompt. See
+  [Login to the simulation server without a password](#login-to-the-simulation-server-without-a-password) below.
+- **For local on Windows: WSL** with Palace, as the gds2palace Windows installer sets it up. The model folder must be
+  on a local drive, not on a network drive.
+
+Ask "where can I run Palace?", and the assistant checks each target: reachable, Palace found, free RAM, and whether
+Palace is already running there.
+
+### Login to the simulation server without a password
+
+The MCP server runs `ssh` in the background, where nobody can type a password. So ssh must log in with a **key**
+instead: a pair of files on your computer, of which the public half is stored on the simulation server. You set this
+up once per computer. The commands below are the same in a Windows PowerShell, a Linux terminal and a macOS terminal
+(Windows 10 and 11 include ssh); replace `you@simserver.example.com` with your login and the server's name.
+
+1. **Make a key**, if you don't have one yet (`~/.ssh/id_ed25519` exists, on Windows
+   `C:\Users\<you>\.ssh\id_ed25519`):
+
+   ```
+   ssh-keygen -t ed25519
+   ```
+
+   Press Enter for the file name. For the passphrase, see step 4.
+
+   This writes two files into your `.ssh` folder. `id_ed25519` is the **private key** (Ed25519 is the key type, the
+   current standard): it stays on your computer, never give it to anyone. `id_ed25519.pub` is the **public key**:
+   that is the half that goes to the simulation server in step 2. When you log in, the server checks that your
+   computer has the private key that matches the public key it stores, so no password is needed. An older key
+   (`id_rsa`) works the same way; then use `id_rsa.pub` in step 2.
+
+2. **Copy the public key to the simulation server.** It asks for your password one last time.
+
+   On Linux and macOS:
+
+   ```
+   ssh-copy-id you@simserver.example.com
+   ```
+
+   In a Windows PowerShell (Windows has no `ssh-copy-id`):
+
+   ```
+   type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh you@simserver.example.com "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+   ```
+
+3. **Give the server a short name** (optional, but then `host = "simserver"` is enough in the targets file). Add to
+   `~/.ssh/config` (on Windows `C:\Users\<you>\.ssh\config`, a text file without extension):
+
+   ```
+   Host simserver
+       HostName simserver.example.com
+       User you
+   ```
+
+4. **Passphrase.** A key without a passphrase works at once, but anyone who copies the key file can log in. With a
+   passphrase, let the ssh agent remember it, so that ssh doesn't ask:
+   - Windows: once, in a PowerShell as administrator: `Get-Service ssh-agent | Set-Service -StartupType Automatic;
+     Start-Service ssh-agent`, then (as yourself) `ssh-add`.
+   - macOS: `ssh-add --apple-use-keychain ~/.ssh/id_ed25519`.
+   - Linux: `ssh-add` in your desktop session (most desktops start an agent).
+
+5. **Check** that it works without any question:
+
+   ```
+   ssh -o BatchMode=yes simserver true
+   ```
+
+   No output means it works. "Permission denied" means the key isn't accepted yet (repeat step 2, or ask the
+   server's administrator whether key login is allowed). The first connection to a new server asks you to confirm
+   its fingerprint: answer it once in a terminal (`ssh simserver`), the MCP server can't.
+
+More background: [Microsoft: OpenSSH key management](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_keymanagement)
+(Windows), [Red Hat: passwordless SSH](https://www.redhat.com/en/blog/passwordless-ssh) (Linux).
+
+### What happens during a run
+
+1. **Submit.** The assistant tells you the target and the RAM estimate, and asks you first. For an ssh target, the
+   mesh, `config.json` and `port_information.json` are copied to
+   `<remote_dir>/<your user name>/<project folder>/<model>_<job id>` on the simulation server. That folder can only be read
+   by you. Every run gets a folder of its own; nothing on the simulation server is overwritten.
+2. **Watch.** A terminal window on your screen shows the Palace log live. Closing it does not stop the run. Ask "how
+   far is it?" at any time: the assistant reports the port, frequency and AMR iteration, the RAM, and the last log
+   lines. This also works in a new session, or after the assistant was restarted: each run is recorded in
+   `mcp_palace_job.json` in the model folder.
+3. **Fetch.** When Palace finished, the results are copied back into `palace_model/<model>_data` (the Palace log as
+   `palace.log`). The Touchstone files are made on your computer, as `combine_snp` does, and the assistant summarizes
+   the run. The paraview field dumps are only copied if you ask for them, because they are large. The run folder
+   stays on the simulation server until you ask for it to be deleted.
+
+The MCP server never stops a run. If you want to end one, end its processes on the simulation server (`kill`).
+
+### Simulation servers that several people share
+
+A target without `shared` is for one person: it refuses to start while any Palace runs on that computer, so that two
+runs never fight for the same cores.
+
+A simulation server that several people use needs a queue that every run goes through, also runs started from setupEM or a
+terminal. gds2palace has one: `run_palace_shared` (in its `scripts` folder). The administrator installs it once as
+the simulation server's `run_palace` and sets how many runs may run at the same time, and with how many processes. Each run then
+waits for a free slot. Mark such a simulation server with `shared = true`:
+
+```toml
+[targets.labserver]
+type = "ssh"
+host = "labserver"
+shared = true
+run_command = "/usr/local/bin/run_palace {config}"
+```
+
+Then the assistant reports a waiting run as "queued", with who is running Palace at the moment (user names and process
+counts only). With `shared = true`, the MCP server checks that the target's `run_palace` really is `run_palace_shared`,
+and refuses otherwise. Give the full path in `run_command`: the gds2palace installer puts a `run_palace` of its own
+into each user's `~/venv/palace/bin`, which would bypass the queue.
+
 ## How to start
 
 Open a terminal in the folder with your layout, start `claude`, and describe what you want. A few examples:
@@ -208,7 +367,7 @@ Build a Palace model for my_inductor.gds. The ports are on layers 201 and 202.
 Check palace_balun.py and tell me if any settings are wrong.
 ```
 
-The server also provides a ready-made starting prompt for a new model. In Claude Code, type `/` and choose
+The MCP server also provides a ready-made starting prompt for a new model. In Claude Code, type `/` and choose
 `/mcp__gds2palace__new_model` from the list. The assistant then inspects the layout and asks you the design questions before it writes
 anything.
 

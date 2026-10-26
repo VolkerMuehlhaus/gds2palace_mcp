@@ -134,7 +134,7 @@ instead of `no_gui`:
 }
 ```
 
-gds2palace itself gives no error for this. The script would open a gmsh window and wait, which on a server without a
+gds2palace itself gives no error for this. The script would open a gmsh window and wait, which on a computer without a
 screen looks like a hang. The same check finds missing required settings (for example no `refined_cellsize`), and
 ports whose GDS layer is never added to the layer list.
 
@@ -179,11 +179,16 @@ This took 9 seconds. Larger layouts or finer meshes take minutes.
 > Next step: copy the `L2n0_model_data` folder to your Linux machine and run `./run_sim` there. It runs Palace and
 > converts the result to `L2n0_model.s2p`. I can't start Palace from here.
 
+This session was recorded before the MCP server could run Palace (0.6.0). With a targets file (see
+[Running Palace](README.md#running-palace)), the next step can stay in the conversation: "run it on simserver" starts
+Palace there (`submit_simulation`), "how far is it?" shows its progress (`simulation_status`), and "get the
+results" copies them back and makes `L2n0_model.s2p` (`fetch_results`).
+
 ## 4. After the simulation
 
-The Palace run itself is outside this server (see [README.md](README.md#what-it-cant-do)). When the results are
-back on your computer, ask "Did the run finish, and how long did it take?": `summarize_results` reports the unknowns,
-run time and peak RAM, and the Touchstone files it found. Then you can continue in the same conversation, for example:
+When the results are on your computer (fetched by the MCP server, or copied back by you), ask "Did the run finish, and
+how long did it take?": `summarize_results` reports the unknowns, run time and peak RAM, and the Touchstone files it
+found. Then you can continue in the same conversation, for example:
 
 > **You:** What are L and Q of L2n0_model.s2p, and show me the curves.
 

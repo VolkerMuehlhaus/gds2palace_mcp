@@ -6,7 +6,7 @@ import re
 import sys
 import tempfile
 
-from .common import captured_output
+from .common import captured_output, model_dir
 
 MAX_RUNS = 20
 TOUCHSTONE_RE = re.compile(r"\.s\d+p$", re.IGNORECASE)
@@ -27,14 +27,6 @@ def _palace_summary_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
-
-
-def _search_root(path):
-    path = os.path.abspath(path)
-    if path.endswith(".py"):
-        basename = os.path.splitext(os.path.basename(path))[0]
-        return os.path.join(os.path.dirname(path), "palace_model", f"{basename}_data")
-    return path if os.path.isdir(path) else os.path.dirname(path)
 
 
 def _run_files(run_dir):
@@ -60,7 +52,7 @@ def _not_converged(files):
 
 
 def summarize_results(path, plot=False):
-    root = _search_root(path)
+    root = model_dir(path)
     if not os.path.isdir(root):
         raise FileNotFoundError(f"{root} does not exist: generate the model and run Palace first.")
     palace_summary = _palace_summary_module()

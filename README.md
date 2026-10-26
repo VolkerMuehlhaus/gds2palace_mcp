@@ -7,8 +7,10 @@ An [MCP](https://modelcontextprotocol.io) server for
 Claude Desktop, or any other MCP client) inspect GDSII layouts and stackup files, check model scripts, and generate
 AWS Palace models on your computer.
 
-The server runs locally, in the same Python environment as gds2palace, and works with the files on your disk. It
-does not run the Palace solver: Palace runs on Linux, as before (`run_sim`, see the gds2palace documentation).
+The MCP server runs locally, in the same Python environment as gds2palace, and works with the files on your disk.
+Palace itself runs on Linux: on the simulation servers (ssh) or the WSL/Linux machine that you list in a targets
+file, the MCP server starts it, watches it and copies the results back ([Running Palace](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md#running-palace)).
+Without that file, you run `run_sim` on Linux as before.
 
 ## Installation
 
@@ -19,7 +21,7 @@ pip install gds2palace_mcp
 This also installs gds2palace and its requirements (gdspy, gmsh, shapely, numpy), gds_prepare_for_EM, gds_viewer,
 plot_snp and scikit-rf. It needs gds2palace 0.9.2 or newer, which ships the IHP stackup files and the result tools.
 
-Add the server to Claude Code, using the Python environment where it is installed:
+Add the MCP server to Claude Code, using the Python environment where it is installed:
 
 ```
 claude mcp add gds2palace -- python -m gds2palace_mcp.server
@@ -37,7 +39,7 @@ For Claude Desktop and other clients, add the same command to the client's MCP s
 
 | Tool | What it does |
 |---|---|
-| `list_stackups` | The IHP stackup files that ship with gds2palace (SG13G2, SG13G2 with conformal passivation, SG13CMOS5L), and the installed versions of the server, gds2palace and the packages its tools use. The server's instructions also name its own and the gds2palace version |
+| `list_stackups` | The IHP stackup files that ship with gds2palace (SG13G2, SG13G2 with conformal passivation, SG13CMOS5L), and the installed versions of the MCP server, gds2palace and the packages its tools use. The MCP server's instructions also name its own and the gds2palace version |
 | `inspect_stackup` | Variables, materials, dielectrics, layers with GDS numbers and z positions, derived layers, free port layer numbers. Accepts variable overrides such as `{"total_thickness": 100}` |
 | `inspect_gds` | Per layer: number of shapes, extent, smallest shape and smallest gap (for choosing the mesh size and via merging). With a stackup, the role of each layer, and which layers gds2palace ignores |
 | `check_layout_complexity` | Before meshing: polygon count per layer (only layers the stackup uses, without flattening the layout, so it is fast for dense fill and via arrays), layout size, polygon density, the layers that dominate, and simplification hints. A report, no pass/fail limit |
@@ -49,10 +51,14 @@ For Claude Desktop and other clients, add the same command to the client's MCP s
 | `check_ports` | Checks the ports against the layout before meshing: via port lines on metal of both layers, in-plane ports touching metal at both ends, layer collisions, several shapes on one port layer |
 | `check_repeated_patterns` | Before meshing: repeated shapes found from the cell hierarchy without flattening (via fields, fill, tiles with holes placed as arrays), with how often each repeats, whether tiles touch, and which `simplify_layout` option would reduce them. Recommends preprocessing from 1000 repeated polygons on, so that gmsh doesn't run for hours |
 | `check_model_script` | Checks a model script without running it: settings that gds2palace doesn't read (typos such as `nogui` are silently ignored by gds2palace), missing required settings, port layers missing from the layer list, removed or legacy settings, a `refined_cellsize` larger than the layout's smallest trace width or coupled-line gap, and the port check |
-| `generate_model` | Runs the model script without gmsh windows and checks the output: `config.json`, mesh with node and element counts, `port_information.json`, `run_sim`. Estimates the Palace unknowns and peak RAM from the mesh (calibrated on 158 Palace runs). With `save_geometry`, it also saves the unmeshed geometry. The output goes to `<script>_generate.log`, shown live in a terminal window on the user's screen. After 5 minutes it returns with `still_running`, and the assistant asks whether to keep waiting; the server never stops a run |
+| `generate_model` | Runs the model script without gmsh windows and checks the output: `config.json`, mesh with node and element counts, `port_information.json`, `run_sim`. Estimates the Palace unknowns and peak RAM from the mesh (calibrated on 158 Palace runs). With `save_geometry`, it also saves the unmeshed geometry. The output goes to `<script>_generate.log`, shown live in a terminal window on the user's screen. After 5 minutes it returns with `still_running`, and the assistant asks whether to keep waiting; the MCP server never stops a run |
 | `wait_for_model` | Keeps waiting for a model generation that is still running |
 | `show_in_gmsh` | Opens the mesh, or the unmeshed geometry, in the gmsh GUI on the user's screen |
 | `preview_layout` | The layout as an image (via [gds_viewer](https://github.com/VolkerMuehlhaus/gds_viewer)) with the ports labelled, for the assistant to look at. IHP SG13G2 colors and patterns; for other technologies, colors from the stackup materials, with a legend |
+| `list_targets` | The computers where Palace may run, from the user's `~/.gds2palace_mcp/targets.toml`: simulation servers (ssh) and the local machine (WSL on Windows, Linux). With `check`: reachable, Palace found, RAM, and the Palace processes running there (counts and user names) |
+| `submit_simulation` | Starts Palace for a generated model on a target: copies mesh and config to a simulation server (into a private folder of its own per run), starts the target's `run_palace` detached, and shows the log live in a terminal window. Refuses while Palace runs on a single-user target; on a shared simulation server with gds2palace's `run_palace_shared`, the run waits in its queue |
+| `simulation_status` | Queued, running, finished, failed or stopped; port, frequency step and AMR iteration from the log, the run's own RAM, 'did NOT converge' lines, last log lines. Works after a restart (job record in the model folder) |
+| `fetch_results` | Copies the results back (without paraview field dumps unless asked), makes the Touchstone files (combine_snp) and returns the run summary. Deletes the run folder on the simulation server only when asked |
 | `summarize_results` | Summary of finished Palace runs (gds2palace's palace_summary): unknowns, mesh elements, run time, peak RAM, AMR convergence (Max \|ΔS\| per iteration, optional plot), Touchstone files found, "did NOT converge" in saved logs |
 | `sparameter_summary` | Numbers from Touchstone files: ports, frequency range, passivity and reciprocity, dB minimum/maximum, dB/phase at chosen frequencies |
 | `plot_sparameters` | dB/phase plots and Smith charts as images for the assistant (via [plot_snp](https://github.com/VolkerMuehlhaus/plot_snp)), several files in one plot |
@@ -82,16 +88,19 @@ The layouts, stackup and Touchstone files of the tests are generated in the test
 a ground plane, coupled lines, a tiled ground plane with openings, series R-L-C networks). Tests marked `examples`
 check the values found on the real example layouts of the gds2palace, gds_prepare_for_EM and lumpedmodel
 repositories; they run when those repositories are next to this one and are skipped otherwise. The snp2le tests
-are skipped when snp2le is not installed. GitHub runs the tests on every pull request (Windows, Linux and macOS,
+are skipped when snp2le is not installed. The Palace run tests use a fake `run_palace` and a fake `ssh` and run on
+Linux only. GitHub runs the tests on every pull request (Windows, Linux and macOS,
 Python 3.10 and 3.13).
 
 ## Notes
 
-- All paths are paths on the computer where the server runs.
-- `generate_model` runs the script with the Python of the server's environment. If the script adds a local
+- All paths are paths on the computer where the MCP server runs.
+- `generate_model` runs the script with the Python of the MCP server's environment. If the script adds a local
   `gds2palace` folder to `sys.path`, that copy is used; the result shows which gds2palace version and file were used.
 - With the stdio transport, gds2palace's printed output is captured and returned in the tool results.
-- Windows (gmsh, plots, the live log) open on the computer where the server runs: Windows, macOS (Terminal for the
+- The Palace run tools never stop or delete a run on their own. ssh runs use passwordless login (`BatchMode`); the
+  scripts on the target go through `bash -l` (PATH from `~/.profile`, as the gds2palace installers set it up).
+- Windows (gmsh, plots, the live log) open on the computer where the MCP server runs: Windows, macOS (Terminal for the
   log), or Linux with a display (the log uses the first working terminal of x-terminal-emulator, gnome-terminal,
   konsole, xfce4-terminal, xterm). Without a display, the tools say so and work without the window.
 

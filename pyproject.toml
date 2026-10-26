@@ -23,6 +23,7 @@ dependencies = [
     "gdspy>1.6.0",
     "shapely>=2.0",
     "numpy",
+    "tomli; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
