@@ -67,8 +67,16 @@ def test_differential_transformer_from_pairs(tmp_path):
     path = write(tmp_path / "diff.s4p", network.s)
     r, _ = figures.figures_of_merit(path, "transformer", pairs=[[1, 2], [3, 4]])
     assert r["L1_low_frequency_nH"] == pytest.approx(1.0, abs=1e-6) and r["k_low_frequency"] == pytest.approx(0.7, abs=1e-6)
+    assert not any("k is negative" in n for n in r["notes"])
     swapped, _ = figures.figures_of_merit(path, "transformer", pairs=[[3, 4], [1, 2]])
     assert swapped["L1_low_frequency_nH"] == pytest.approx(2.0, abs=1e-6)
+    # secondary pair the other way round: k changes sign, and the result says why
+    reversed_secondary, _ = figures.figures_of_merit(path, "transformer", pairs=[[1, 2], [4, 3]])
+    assert reversed_secondary["k_low_frequency"] == pytest.approx(-0.7, abs=1e-6)
+    assert any("k is negative" in n and "dot convention" in n for n in reversed_secondary["notes"])
+    # the differential 2-port keeps the file's name (plot title)
+    network = figures._network(path)
+    assert figures._differential_two_port(network, [[1, 2], [3, 4]]).name == network.name
 
 
 def test_balun_imbalance(tmp_path):

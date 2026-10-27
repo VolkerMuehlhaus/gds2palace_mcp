@@ -61,7 +61,8 @@ def _differential_two_port(network, pairs):
     order = sorted((p for p in port_map if p["mode"] == "differential"),
                    key=lambda p: 0 if min(p["input_ports"]) == first else 1)
     index = [p["port"] - 1 for p in order]
-    two_port = rf.Network(frequency=mm.frequency, s=mm.s[:, index][:, :, index], z0=np.real(mm.z0[:, index]))
+    two_port = rf.Network(frequency=mm.frequency, s=mm.s[:, index][:, :, index], z0=np.real(mm.z0[:, index]),
+                          name=network.name)
     two_port.path = network.path
     return two_port
 
@@ -148,6 +149,9 @@ def _transformer(network, roles):
              "the loss of the transformer itself, without mismatch. Zsource_opt/Zload_opt give that match "
              "(on primary and secondary).",
              "L1, L2 and k lose their meaning near and above the self-resonance (SRF)."]
+    if np.nanmedian(k) < 0:
+        notes.append("k is negative: the secondary's positive port is at the other end of its winding than the "
+                     "primary's (dot convention). |k| is the coupling; swap the secondary's ports for positive k.")
     return curves, extra, worst, notes, {"plot": [("L1_nH", "L2_nH"), ("k",), ("Q1", "Q2"),
                                                   ("min_insertion_loss_dB",)]}
 
