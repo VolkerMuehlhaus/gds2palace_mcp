@@ -1,17 +1,31 @@
-# Example session: from an inductor layout to a Palace model
+# Example session: from an inductor layout to L and Q
 
-This is a complete session with Claude Code and the gds2palace MCP server. The layout is `L_2n0_twoport.gds`, a
-2-turn octagon inductor (about 2 nH) in IHP SG13G2, from the gds2palace examples. The goal is a Palace model for
-S-parameters up to 50 GHz.
+This is a complete session with Claude Code and the gds2palace MCP server: from a layout to a Palace model, the
+Palace run, and the inductor's L and Q. The layout is `L_2n0_twoport.gds`, a 2-turn octagon inductor in IHP SG13G2,
+from the gds2palace examples.
 
-The tool results and numbers below are from a real run (gds2palace 0.9.1, Windows). The assistant's wording will be
-different in your session, because it writes its answers freshly each time. What matters is the sequence: look at the
-inputs, ask you, write the script, check it, build the model.
+Every step has two views:
 
-Lines starting with **You** are typed by you. **Tool call** blocks show what the assistant calls; in Claude Code
-these appear as collapsed lines that you can expand. Long tool results are shortened here (`...`).
+- **In the terminal**: what you type, what Claude answers, and the windows that open on your screen.
+- **Under the hood** (click to open): which tools Claude called and what they returned. You don't need this part to
+  use the server; it shows where Claude's answers come from.
 
-## 1. Describe what you want
+All numbers are from a real run (gds2palace_mcp 0.8.0, gds2palace 0.9.2, a Windows laptop with Palace in WSL). Claude
+writes its answers freshly each time, so the wording in your session will differ. What stays the same is the order:
+look at the inputs, ask you, write and check the script, build the model, run Palace, read the results.
+
+**Before you start:** the MCP server is set up (see [Setup](README.md#setup)). For step 4, Palace has a place to run:
+here a targets file with the laptop's WSL ([Running Palace](README.md#running-palace)):
+
+```toml
+[targets.laptop]
+type = "local"
+description = "WSL on this laptop (Ubuntu-24.04)"
+```
+
+## 1. Say what you want
+
+### In the terminal
 
 Start Claude Code in the folder with the layout:
 
@@ -23,188 +37,221 @@ claude
 > **You:** I have L_2n0_twoport.gds, a 2-turn inductor in SG13G2. I want a Palace model for S-parameters up to
 > 50 GHz.
 
-The assistant first reads the gds2palace guide (resource `gds2palace://agents-guide`). Then it looks at the
-available stackups and at the layout.
+While Claude works, Claude Code shows each tool it uses as a short line, which you can expand to see what was sent
+and returned. The first time a tool is used, Claude Code asks you to allow it, once or for the rest of the session.
+Then Claude answers:
 
-**Tool call** `list_stackups`
-
-```json
-{
-  "stackups": [
-    {"name": "SG13CMOS5L_200um.xml",
-     "description": "SG13CMOS5L parameterized stackup for gds2palace, EM+thermal, includes resistors, full height SiO2+Passivation over TopMetal1. ..."},
-    {"name": "SG13G2_FEM_200um.xml",
-     "description": "SG13G2 parameterized stackup for gds2palace, EM+thermal, includes resistors, full height SiO2+Passivation over TopMetal2. ..."},
-    {"name": "SG13G2_FEM_200um_passi3D.xml", "description": "..."}
-  ]
-}
-```
-
-**Tool call** `inspect_gds` with `gds_file: L_2n0_twoport.gds`, `stackup_file: SG13G2_FEM_200um.xml`
-
-```json
-{
-  "cell": "L_2n0_simplify",
-  "unit_m": 1e-06,
-  "bbox": [-127.0, -54.0, 127.0, 284.0],
-  "layers": [
-    {"layer": 126, "shapes": 3, "smallest_shape_side": 12.0,   "smallest_gap": 44.4,   "stackup_role": ["conductor TopMetal1"]},
-    {"layer": 133, "shapes": 4, "smallest_shape_side": 10.75,  "smallest_gap": 24.09,  "stackup_role": ["via TopVia2"]},
-    {"layer": 134, "shapes": 2, "smallest_shape_side": 100.77, "smallest_gap": 2.998,  "stackup_role": ["conductor TopMetal2"]},
-    {"layer": 201, "shapes": 1, "smallest_shape_side": 0.0,    "smallest_gap": null,   "stackup_role": ["not in stackup: conventional port/thermal layer range"]},
-    {"layer": 202, "shapes": 1, "smallest_shape_side": 0.0,    "smallest_gap": null,   "stackup_role": ["not in stackup: conventional port/thermal layer range"]},
-    {"layer": 250, "shapes": 1, "smallest_shape_side": 64.0,   "smallest_gap": null,   "stackup_role": ["sheet SUBGND"]}
-  ],
-  ...
-}
-```
-
-The assistant summarizes this and asks you for the decisions it can't make:
-
-> **Claude:** The layout (cell `L_2n0_simplify`, 254 × 338 µm) uses:
+> **Claude:** The layout (cell `L_2n0_simplify`, 254 × 338 µm) has:
 >
-> | Layer | Stackup | Shapes | Smallest gap |
-> |---|---|---|---|
-> | 134 | TopMetal2 (the coil) | 2 | 3.0 µm between the turns |
-> | 133 | TopVia2 | 4 | |
-> | 126 | TopMetal1 (underpass and feed lines) | 3 | 44 µm |
-> | 250 | SUBGND (ground sheet on the EPI layer) | 1 | |
-> | 201, 202 | not in the stackup: probably your ports | 1 each | |
+> | Layer | In the stackup | What it is |
+> |---|---|---|
+> | 134 | TopMetal2 | the coil, 12 µm wide, turns 3.0 µm apart |
+> | 133 | TopVia2 | 4 vias between the coil and the underpass |
+> | 126 | TopMetal1 | underpass and the two feed lines |
+> | 250 | SUBGND | ground sheet under the feed lines |
+> | 201, 202 | not in the stackup | one zero-width line each: your ports |
 >
-> The port shapes on 201 and 202 are lines with zero width, which is how gds2palace via ports are drawn. They sit at
-> y = 0, at the ends of the TopMetal1 feed lines, above the SUBGND sheet.
+> I looked at the layout: the port lines sit at the ends of the two feed lines, above the SUBGND sheet. There are no
+> fill or via arrays to simplify.
 >
 > Before I write the script, please confirm:
 >
-> 1. Ports: port 1 on layer 201 and port 2 on layer 202, each a via port from SUBGND up to TopMetal1, 50 Ω?
+> 1. Ports: port 1 on layer 201 and port 2 on layer 202, each from SUBGND up to TopMetal1, 50 Ω?
 > 2. Stackup: `SG13G2_FEM_200um.xml` (planar passivation, 200 µm chip), or the conformal passivation variant?
 > 3. Frequency: 0 to 50 GHz in 0.5 GHz steps?
-> 4. Mesh: the turns are 3 µm apart, so I suggest `refined_cellsize = 2` µm and FEM order 2. Coarser is faster but
->    less accurate for the coupling between the turns. OK?
+> 4. Mesh: the turns are 3 µm apart, so the mesh cells along the metal edges must not be larger: I suggest
+>    `refined_cellsize = 2` µm (2.5 µm is the largest that still fits) and FEM order 2. OK?
 
-Note what the assistant did and didn't do. It read the gap between the turns from the layout, and suggested a mesh
-size from it. It did not decide the port connection, the stackup or the frequency range on its own.
+Claude read the gap between the turns from the layout and suggested the mesh size from it. It did not decide the
+port connection, the stackup or the frequency range: those are your decisions.
+
+<details>
+<summary><b>Under the hood</b></summary>
+
+Claude first reads the gds2palace guide for AI assistants (the resource `gds2palace://agents-guide`), then calls:
+
+| Tool | Main inputs | What it returned (shortened) |
+|---|---|---|
+| `list_stackups` | | the three IHP stackups that ship with gds2palace (`SG13G2_FEM_200um.xml`, its conformal passivation variant `..._passi3D.xml`, `SG13CMOS5L_200um.xml`), and the installed versions |
+| `inspect_gds` | layout, stackup `SG13G2_FEM_200um.xml` | cell `L_2n0_simplify`, size 254 × 338 µm; per layer the shape count, smallest shape and smallest gap (TopMetal2: 2 shapes, gap 2.998 µm) and its role in the stackup; layers 201/202 "not in stackup: conventional port layer range" |
+| `suggest_mesh_size` | layout, stackup | traces on TopMetal2 and TopMetal1 (12 µm wide), six coupled-line sections on TopMetal2 with a 2.998 µm gap; suggested `refined_cellsize`: accurate 2.0 µm, quick 2.5 µm |
+| `check_repeated_patterns` | layout, stackup | 10 polygons read by the model, none in repeated patterns: no preprocessing needed |
+| `preview_layout` | layout, ports {1: 201, 2: 202} | the picture below, which Claude looks at to check the port positions |
+
+![The layout as Claude sees it, with the ports labelled](png/example_session_layout.png)
+
+</details>
+
+## 2. Claude writes and checks the script
+
+### In the terminal
 
 > **You:** Yes to all four.
 
-## 2. The assistant writes and checks the script
+> **Claude:** I wrote `L2n0_model.py` from the template in the gds2palace guide, with your answers filled in, and
+> checked it: no problems found. Shall I build the model?
 
-The assistant writes `L2n0_model.py` from the template in the gds2palace guide, with your answers filled in. The
-important lines:
+The script is a normal gds2palace model script in your folder; you can open it, change it and run it yourself.
+
+<details>
+<summary><b>Under the hood</b></summary>
+
+The important lines of `L2n0_model.py`:
 
 ```python
+gds_filename = "L_2n0_twoport.gds"
 XML_filename = utilities.get_stackup_path("SG13G2_FEM_200um.xml")   # ships with gds2palace
 ...
-settings['fstart'] = 0
+settings['fstart'] = 0               # Hz, 0 is replaced by a small value (no DC in FEM)
 settings['fstop'] = 50e9
 settings['fstep'] = 0.5e9
-settings['refined_cellsize'] = 2
+settings['refined_cellsize'] = 2     # um, mesh size at metal edges (3 um gap between the turns)
 settings['order'] = 2
-settings['no_gui'] = True
+settings['no_gui'] = True            # no gmsh window: required for unattended runs
 ...
-simulation_ports.add_port(simulation_setup.simulation_port(portnumber=1, voltage=1, port_Z0=50, source_layernum=201,
-                          from_layername='SUBGND', to_layername='TopMetal1', direction='z'))
-simulation_ports.add_port(simulation_setup.simulation_port(portnumber=2, voltage=1, port_Z0=50, source_layernum=202,
-                          from_layername='SUBGND', to_layername='TopMetal1', direction='z'))
+simulation_ports.add_port(simulation_setup.simulation_port(
+    portnumber=1, voltage=1, port_Z0=50, source_layernum=201,
+    from_layername='SUBGND', to_layername='TopMetal1', direction='z'))
+simulation_ports.add_port(simulation_setup.simulation_port(
+    portnumber=2, voltage=1, port_Z0=50, source_layernum=202,
+    from_layername='SUBGND', to_layername='TopMetal1', direction='z'))
 ```
 
-Then it checks the script before running it.
+`check_model_script` found no errors, warnings or remarks. What it catches: with a typo,
+`settings['nogui'] = True` instead of `no_gui`, it reports
 
-**Tool call** `check_model_script` with `script_path: L2n0_model.py`
+> line 26: settings['nogui'] is not read by gds2palace and not by this script, so it has no effect. Did you mean
+> 'no_gui'?
 
-```json
-{"ok": true, "errors": [], "warnings": [], "info": []}
-```
+gds2palace itself gives no error for this: the script would open a gmsh window and wait, which on a computer without
+a screen looks like a hang. The same check finds missing required settings, and ports whose GDS layer is never read.
 
-### What the check catches
+</details>
 
-The script above is clean. Here is what the same check reports when a script has a typo, `settings['nogui'] = True`
-instead of `no_gui`:
+## 3. Claude builds the model
 
-```json
-{
-  "ok": true,
-  "errors": [],
-  "warnings": [
-    "line 24: settings['nogui'] is not read by gds2palace and not by this script, so it has no effect. Did you mean 'no_gui'?"
-  ],
-  "info": [
-    "settings['no_gui'] is not True: gmsh opens a window when the script runs by hand. generate_model sets no_gui itself."
-  ]
-}
-```
+### In the terminal
 
-gds2palace itself gives no error for this. The script would open a gmsh window and wait, which on a computer without a
-screen looks like a hang. The same check finds missing required settings (for example no `refined_cellsize`), and
-ports whose GDS layer is never added to the layer list.
+> **You:** Yes, build it.
 
-## 3. The assistant builds the model
+A terminal window opens on your screen and shows the meshing log live (gmsh). Closing it doesn't stop the meshing.
+For this inductor it took 10 seconds; large layouts or fine meshes take minutes.
 
-**Tool call** `generate_model` with `script_path: L2n0_model.py`
-
-```json
-{
-  "returncode": 0,
-  "ok": true,
-  "models": [
-    {
-      "sim_path": "d:\\designs\\inductor\\palace_model\\L2n0_model_data",
-      "files": {"config.json": true, "port_information.json": true, "run_sim": true},
-      "gds2palace_version": "0.9.1",
-      "mesh_size_MB": 4.7,
-      "nodes": 18019,
-      "elements": 101847
-    }
-  ],
-  "important_lines": [
-    "WARNING: Start frequency changed from DC to  0.01  GHz!",
-    "Warning : 8 ill-shaped tets are still in the mesh",
-    "Warning : Mesh generation error summary",
-    "Warning :     1 warning",
-    "Warning :     0 errors"
-  ]
-}
-```
-
-This took 9 seconds. Larger layouts or finer meshes take minutes.
-
-> **Claude:** The model is ready in `palace_model\L2n0_model_data`: `config.json`, the mesh `L2n0_model.msh`
-> (101,847 elements, 4.7 MB), `port_information.json` and `run_sim`.
+> **Claude:** The model is ready in `palace_model\L2n0_model_data`: the mesh has 101,847 elements (81,851
+> tetrahedra, 4.7 MB).
+>
+> **Estimate for Palace:** about 555,000 unknowns, and a peak RAM of about 7.9 GB (at most 10.2 GB) over all MPI
+> processes.
 >
 > Two warnings, both expected:
-> - The start frequency was moved from 0 to 0.01 GHz. FEM can't solve at DC. `combine_snp` adds an extrapolated
->   DC point later, in a separate `_dc` file.
-> - gmsh reports 8 ill-shaped tetrahedra. A few of these are normal near thin layers, and there were 0 mesh errors.
+> - The start frequency was moved from 0 to 0.01 GHz: FEM can't solve at DC. The Touchstone conversion adds an
+>   extrapolated DC point later, in a separate `_dc` file.
+> - gmsh reports 8 ill-shaped tetrahedra. A few of these are normal near thin layers; there were 0 mesh errors.
 >
-> Next step: copy the `L2n0_model_data` folder to your Linux machine and run `./run_sim` there. It runs Palace and
-> converts the result to `L2n0_model.s2p`. I can't start Palace from here.
+> Your targets file has one target, `laptop` (WSL on this computer). Shall I run Palace there?
 
-This session was recorded before the MCP server could run Palace (0.6.0). With a targets file (see
-[Running Palace](README.md#running-palace)), the next step can stay in the conversation: "run it on simserver" starts
-Palace there (`submit_simulation`), "how far is it?" shows its progress (`simulation_status`), and "get the
-results" copies them back and makes `L2n0_model.s2p` (`fetch_results`).
+<details>
+<summary><b>Under the hood</b></summary>
 
-## 4. After the simulation
+`generate_model` ran the script without gmsh windows (the log goes to `L2n0_model_generate.log` and to the window)
+and checked what it wrote:
 
-When the results are on your computer (fetched by the MCP server, or copied back by you), ask "Did the run finish, and
-how long did it take?": `summarize_results` reports the unknowns, run time and peak RAM, and the Touchstone files it
-found. Then you can continue in the same conversation, for example:
+| Field | Value |
+|---|---|
+| files in `palace_model/L2n0_model_data` | `config.json`, `port_information.json`, `run_sim`, `L2n0_model.msh` |
+| mesh | 18,019 nodes, 101,847 elements, 81,851 tetrahedra, 4.7 MB |
+| estimate | 555,000 unknowns (519,000 to 591,000), peak RAM typical 7.9 GB, worst case 10.2 GB |
+| important lines | "Start frequency changed from DC to 0.01 GHz", "8 ill-shaped tets are still in the mesh", "0 errors" |
 
-> **You:** What are L and Q of L2n0_model.s2p, and show me the curves.
+The estimate is calibrated on earlier Palace runs in the gds2palace repository: unknowns per tetrahedron for FEM
+order 2 (163 runs), and peak RAM per unknown (158 runs).
 
-The assistant uses `passive_values` (L, R and Q from the S-parameters, peak Q, self-resonance frequency) with a plot,
-and asks you how the inductor is connected if that is not clear: differential (between port 1 and port 2), or
-single-ended (port 2 to ground). Other requests: "compare S11 of L2n0_model.s2p and measured.s2p" (`plot_sparameters`),
-or "open the plots for me" (`show_sparameters`, windows on your screen).
+</details>
+
+## 4. Palace runs
+
+### In the terminal
+
+> **You:** Yes, run it on the laptop.
+
+> **Claude:** The laptop has 15.7 GB of RAM free, enough for the estimated 7.9 GB, and no Palace is running there.
+> I started Palace in WSL; a second terminal window shows its log. It will take a while: ask me any time how far it
+> is.
+
+A terminal window opens with the Palace log. As before, closing it doesn't stop the run. You can go on working, or
+ask:
+
+> **You:** How far is it?
+
+> **Claude:** Palace is running with 8 processes and uses 4.8 GB so far. It is building the reduced-order model
+> for the adaptive frequency sweep, at port 1 of 2. No solver problems in the log.
+
+<details>
+<summary><b>Under the hood</b></summary>
+
+| Tool | What it did |
+|---|---|
+| `list_targets` with `check` | target `laptop` reachable, `run_palace` found, 16.4 GB RAM (15.7 GB free), no Palace processes running |
+| `submit_simulation` | started `run_palace config.json` in WSL in the model folder, in the background; the run and its log (`palace.log`) stay in `palace_model/L2n0_model_data`, the job is recorded in `mcp_palace_job.json` there |
+| `simulation_status` (after 1 minute) | running; 8 MPI processes of this run, 4.8 GB; phase "building the reduced-order model (adaptive sweep)", port 1/2; 0 "did NOT converge" lines; the last 15 log lines |
+
+The run doesn't depend on the conversation: you can close Claude Code, and `simulation_status` finds the run again
+later from `mcp_palace_job.json`. The MCP server never stops a run; to end one, end its processes yourself.
+
+</details>
+
+## 5. Results: L and Q
+
+### In the terminal
+
+> **You:** Is it done?
+
+> **Claude:** Yes, Palace finished after 20 minutes without errors. I made the Touchstone files: the result is
+> `L2n0_model.s2p` in `palace_model\L2n0_model_data\output\L2n0_model\`, plus a version with an extrapolated DC point
+> (`_dc`) and one with the port inductance removed (`_deembedded`).
+>
+> The run had 570,848 unknowns and a peak RAM of 7.52 GB, close to the estimate (555,000 and 7.9 GB).
+
+> **You:** What are L and Q of the inductor?
+
+> **Claude:** How is the inductor used: between port 1 and port 2 (floating), or with port 2 to ground?
+
+> **You:** Between port 1 and port 2.
+
+> **Claude:** From port 1 to port 2:
+>
+> | | |
+> |---|---|
+> | L at low frequency | 1.74 nH |
+> | L and Q at 10 GHz | 1.91 nH, Q = 21.3 |
+> | Peak Q | 23.2 at 7 GHz |
+> | Self-resonance | 23.3 GHz |
+>
+> L rises toward the self-resonance, and Q falls above 7 GHz.
+
+To see the curves yourself, ask "show me S11 and S21 of L2n0_model.s2p": the plot windows open on your screen.
+
+<details>
+<summary><b>Under the hood</b></summary>
+
+| Tool | What it returned |
+|---|---|
+| `simulation_status` | finished, exit code 0, 0 "did NOT converge" lines |
+| `fetch_results` | for a local target the results are already in place; it ran gds2palace's `combine_extend_snp` (as `combine_snp` does) and returned the run summary: 570,848 degrees of freedom, 81,851 mesh elements, 19 min 56 s, peak RAM 7.52 GB |
+| `passive_values` with `connection: differential`, `plot` | L, R and Q from Z = Z11 − Z12 − Z21 + Z22: L 1.744 nH and R 1.24 Ω at 0.01 GHz; at 10 GHz L 1.913 nH, R 5.65 Ω, Q 21.3; peak Q 23.19 at 7 GHz; self-resonance 23.30 GHz; and the plot below, which Claude looks at |
+
+![L and Q from the Palace result, as Claude sees them](png/example_session_LQ.png)
+
+</details>
 
 Check the result against something you know, for example the PDK model or a measurement of the same inductor. The
-gds2palace examples include such a comparison for another inductor (L6n2) in
-`more_examples/measured_vs_simulated/`.
+gds2palace examples include such a comparison for another inductor (L6n2) in `more_examples/measured_vs_simulated/`.
 
 ## Things to try next
 
 - "Use the conformal passivation stackup instead and compare the mesh size."
-- "Make the chip 100 µm thick." (The assistant uses the stackup variable `total_thickness`, no XML editing.)
-- "What changes if I use `conductor_model = 'solve_inside_skin'`?" (The assistant explains it from the guide;
-  generating the model shows the cost in mesh size.)
+- "Make the chip 100 µm thick." (Claude uses the stackup variable `total_thickness`, no XML editing.)
+- "What changes if I use `conductor_model = 'solve_inside_skin'`?" (Claude explains it from the guide; generating
+  the model shows the cost in mesh size.)
+- "Fit a SPICE model to L2n0_model.s2p." (equivalent circuit with snp2le)
 - "Check all model scripts in this folder."
