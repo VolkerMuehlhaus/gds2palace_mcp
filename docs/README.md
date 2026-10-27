@@ -357,5 +357,5 @@ anything.
 
 ## Next
 
-[example_session.md](example_session.md) shows a full session: from a layout to a meshed Palace model, with the
-output you can expect at each step.
+[example_session.md](example_session.md) shows a full session with an inductor: from the layout to the Palace run
+and L and Q, as you see it in the terminal, and for each step what happens under the hood.
