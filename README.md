@@ -12,6 +12,26 @@ Palace itself runs on Linux: on the simulation servers (ssh) or the WSL/Linux ma
 file, the MCP server starts it, watches it and copies the results back ([Running Palace](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md#running-palace)).
 Without that file, you run `run_sim` on Linux as before.
 
+## Documentation
+
+**Start with the [user guide (docs/README.md)](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md).**
+This page is a short reference; the guide is written for RFIC designers and has the detailed instructions:
+
+- [What MCP is](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md#what-mcp-is), and
+  [where your data goes](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md#where-your-data-goes)
+  (what the assistant receives from each tool, how to keep layouts local)
+- [Setup](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md#setup) step by step, with a
+  virtual environment and a check that the MCP server is connected
+- [What you can do with it](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md#what-you-can-do-with-it)
+  (example requests and the tools they use) and
+  [what it can't do](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md#what-it-cant-do)
+- [Running Palace](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md#running-palace): the
+  targets file, [login to a simulation server without a password](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md#login-to-the-simulation-server-without-a-password),
+  what happens during a run
+
+[docs/example_session.md](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/example_session.md) shows a
+full session with an inductor, from the layout to a meshed Palace model, with real output.
+
 ## Installation
 
 ```
@@ -33,7 +53,10 @@ Or, without installing anything first (needs [uv](https://docs.astral.sh/uv/)):
 claude mcp add gds2palace -- uvx gds2palace_mcp
 ```
 
-For Claude Desktop and other clients, add the same command to the client's MCP server configuration.
+For Claude Desktop and other clients, add the same command to the client's MCP server configuration. The
+[user guide's setup section](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md#setup) goes
+through this step by step; to let the MCP server run Palace for you, see
+[Running Palace](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md#running-palace).
 
 ## What it offers
 
@@ -75,8 +98,9 @@ README).
 Prompt: `new_model` starts a new model: it inspects the layout and asks you for the design decisions (frequency
 range, ports, stackup, accuracy) before writing the script.
 
-New to MCP? [docs/README.md](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md) explains what this can and can't do for an RFIC designer, and
-[docs/example_session.md](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/example_session.md) shows a full session with an inductor.
+You don't call these tools yourself: you ask in plain language, and the assistant picks them. The
+[user guide](https://github.com/VolkerMuehlhaus/gds2palace_mcp/blob/main/docs/README.md#what-you-can-do-with-it) has
+example requests for each, and says what each tool sends to the assistant.
 
 ## Tests
 
