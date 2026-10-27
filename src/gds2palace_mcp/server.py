@@ -14,7 +14,8 @@ from .common import Gds2palaceError, versions
 from .layout import inspect_gds as _inspect_gds
 from .model_run import generate_model as _generate_model
 from .settings_check import check_model_script as _check_model_script
-from . import circuit, complexity, holes, meshsize, model_run, palace_run, patterns, ports, results, sparams
+from . import (circuit, complexity, holes, meshsize, model_run, networks, palace_run, patterns, ports, results,
+               sparams)
 from .stackup import inspect_stackup as _inspect_stackup, list_stackups as _list_stackups
 from .viewers import preview_layout as _preview_layout, show_in_gmsh as _show_in_gmsh
 
@@ -44,7 +45,8 @@ makes the Touchstone files and summarizes the run. Never stop a run. Without tar
 runs run_sim on their Linux machine as before.
 For finished Palace runs, summarize_results gives run time, RAM, unknowns and AMR convergence.
 For results (.sNp files): fit_equivalent_circuit makes a SPICE model (snp2le);
-sparameter_summary and passive_values give numbers, plot_sparameters
+transform_sparameters writes mixed-mode (Sdd, Scc, CMRR), renormalized, terminated or cascaded
+files; sparameter_summary and passive_values give numbers, plot_sparameters
 gives you plots, show_sparameters opens plot windows for the user.
 
 Ask the user for design intent (frequency range, ports, stackup, accuracy versus run time);
@@ -439,6 +441,32 @@ def show_sparameters(files: list[str], parameters: list[str] | None = None, smit
     """Open the interactive plot_snp window(s) on the user's screen (zoom, pan, save). Returns at
     once. You don't see the windows; ask the user. parameters: default S11."""
     return sparams.show_sparameters(files, parameters, smith, zoom)
+
+
+@mcp.tool()
+@expected_errors
+def transform_sparameters(file: str, operation: str, output_file: str = "",
+                          pairs: list[list[int]] | None = None, z0_ohm: float | list[float] | None = None,
+                          terminations: dict[str, float | str] | None = None, second_file: str = "",
+                          frequencies_ghz: list[float] | None = None) -> dict:
+    """Make a new Touchstone file from one (the input is never changed), and return how its ports
+    relate to the input's. The other S-parameter tools then work on the new file.
+
+    operation:
+    - "mixed_mode": differential and common-mode S-parameters. pairs: [[positive, negative], ...],
+      e.g. [[1, 3], [2, 4]] for a differential line on 4 ports, [[2, 3]] for a balun with
+      single-ended port 1. Returns names (file S21 -> Sdd21), Sdd/Sds, mode conversion (Scd, Scs)
+      and CMRR per pair, and the values at frequencies_ghz. Reference impedances: differential
+      2 x z0 (100 ohm), common mode z0 / 2 (25 ohm).
+    - "renormalize": new reference impedance, z0_ohm: one value or one per port (real, ohm).
+    - "terminate": close ports with a load and remove them, terminations: {"3": 50} (ohm),
+      "open" or "short"; the remaining ports are renumbered (see ports).
+    - "cascade": port 2 of this 2-port to port 1 of second_file (a 2-port).
+
+    Ask the user which ports form a pair (and which is positive) if the layout or port names
+    don't make it clear. output_file: default <name>_<operation>.sNp next to the input."""
+    return networks.transform_sparameters(file, operation, output_file, pairs, z0_ohm, terminations, second_file,
+                                          frequencies_ghz)
 
 
 @mcp.tool()

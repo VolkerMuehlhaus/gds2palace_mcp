@@ -18,7 +18,7 @@ dependencies = [
     "gds_viewer>=0.2.0",
     "gds_prepare_for_EM>=1.7.0",
     "plot_snp>=0.1.0",
-    "scikit-rf",
+    "scikit-rf>=2.2.0",
     "matplotlib",
     "gdspy>1.6.0",
     "shapely>=2.0",

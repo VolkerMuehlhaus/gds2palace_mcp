@@ -43,7 +43,7 @@ everything a tool **returns** goes to it as part of the conversation, including 
 | `generate_model`, `wait_for_model` | File paths, log lines from gds2palace and gmsh, mesh size |
 | `show_in_gmsh`, `show_sparameters` | Only the file paths. The windows are shown on your screen; the assistant doesn't see them |
 | `preview_layout` | **A picture of your layout.** This is the one tool that sends the design itself, as an image. For confidential layouts, ask for the picture to be saved locally only ("save the preview as preview.png, don't send it to yourself") |
-| `sparameter_summary`, `passive_values` | Numbers from your S-parameter files: dB values, L, Q, C, resonance frequency |
+| `sparameter_summary`, `passive_values`, `transform_sparameters` | Numbers from your S-parameter files: dB values, L, Q, C, resonance frequency |
 | `plot_sparameters`, `passive_values` with plot | Plots of your S-parameters or of L and Q, as images. Like the layout picture, they can be saved locally only |
 | `list_targets`, `submit_simulation`, `simulation_status`, `fetch_results` | Your target names and the names of your simulation servers, file paths, RAM, the last lines of the Palace log, and how many Palace processes other users run on the simulation server, with their user names (never their files or model names) |
 
@@ -96,6 +96,7 @@ MCP server helps with all three and then builds the model.
 | "Did the Palace run finish, and how long did it take?" | `summarize_results` | Unknowns, mesh size, run time, peak RAM, and for adaptive mesh refinement how much S changed per iteration, for one run or a whole folder of runs |
 | "Show me S11 and S21 of result.s2p" | `show_sparameters` | The plot_snp windows (dB, phase, Smith chart) on your screen |
 | "Compare simulated.s2p with measured.s2p" | `plot_sparameters`, `sparameter_summary` | The assistant sees both curves in one plot, and gets the numbers to compare |
+| "Show me Sdd21 and the CMRR of my balun" | `transform_sparameters` | A new Touchstone file with the differential and common-mode S-parameters of the port pairs you name, and the numbers: Sdd/Sds, mode conversion (Scd/Scs) and the common-mode rejection. Also: "renormalize to 100 Ω", "terminate port 3 with 50 Ω", "cascade with the pad model" |
 | "Make a SPICE model of this inductor" | `fit_equivalent_circuit` | An equivalent circuit (Ngspice or VACASK subcircuit) with its element values, from snp2le. The assistant proposes the model type and the extraction frequency; you confirm |
 | "What is L and Q of this inductor?" | `passive_values` | L, R and Q at low frequency and at chosen frequencies, peak Q, self-resonance frequency |
 
