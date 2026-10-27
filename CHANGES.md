@@ -15,17 +15,14 @@ those of the package (`gds2palace_mcp.__version__`).
 - **Submit:** copies mesh, config and port information to the simulation server into a private folder of its own
   per run (`<remote_dir>/<user>/<project>/<model>_<job id>`, mode 700), starts the target's `run_palace`
   detached, and shows the log live in a terminal window. The RAM estimate is compared with the free RAM.
-  A single-user target refuses to start while Palace runs there.
-- **Status:** queued, running, finished, failed or stopped; port, frequency step and AMR iteration from
+  A target refuses to start while Palace runs there (one run at a time, no queue).
+- **Status:** running, finished, failed or stopped; port, frequency step and AMR iteration from
   the log, the run's own Palace processes and RAM (found by the job id in their environment, so other
   users' runs are never counted as ours), and others' runs as counts and user names only. Works after a
   restart: each run is recorded in `mcp_palace_job.json` in the model folder.
 - **Fetch:** copies the results back (paraview field dumps only on request), makes the Touchstone files
   with gds2palace's `combine_extend_snp` on this computer, and returns the run summary. The run
   folder on the simulation server is deleted only with `delete_remote=True`.
-- **Shared simulation servers:** `shared = true` for one with gds2palace's new `run_palace_shared` (a `flock`
-  slot queue for all users, also for runs from setupEM or a terminal); the MCP server checks that it is
-  installed and reports waiting runs as queued.
 - Tested on WSL (Palace 0.16) and on two Linux simulation servers over ssh (Palace 0.18): the fetched S-parameters
   of the same line model agree within 0.0013 dB.
 - `docs/README.md`: new section "Running Palace"; "Where your data goes" and "What it can't do" updated.

@@ -2,9 +2,8 @@
 
 Targets come from the user's targets.toml (targets.py): a simulation server over ssh, or the local machine (WSL
 on Windows, Linux). A run is described by its job record <run folder>/mcp_palace_job.json, so status and fetch
-work after a restart of the MCP server. A target used by one person refuses to start while Palace runs there. A
-simulation server shared by several users needs gds2palace's run_palace_shared installed as its run_palace: it queues every run (also
-those started from setupEM or a terminal) until one of its slots is free. This MCP server never stops a run.
+work after a restart of the MCP server. A target refuses to start while Palace runs there. This MCP server
+never stops a run.
 """
 
 import datetime
@@ -38,10 +37,6 @@ SSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
 SSH_DOCS = DOCS.replace("#running-palace", "#login-to-the-simulation-server-without-a-password")
 TAIL_LINES = 15
 NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
-# what gds2palace's run_palace_shared writes to the log while it waits for a slot, and when it got one
-SHARED_MARK = "run_palace_shared"
-QUEUE_WAITING = "[run_palace] waiting for a free Palace slot"
-QUEUE_GOT = "[run_palace] got Palace slot"
 
 # Runs Palace in its run folder on the target, with the log in palace.log and the exit code in
 # palace_exit_code. Status finds this run's processes, and only these (other users' Palace processes on the
@@ -64,9 +59,9 @@ echo "[gds2palace_mcp] Palace run {job_id} finished $(date '+%Y-%m-%d %H:%M:%S')
 echo $code > {exit_file}
 """
 
-# Palace log lines that show progress (the same lines setupEM's status bar reads), and the queue lines
+# Palace log lines that show progress (the same lines setupEM's status bar reads)
 PROGRESS_GREP = ("excitation index|It [0-9]+/[0-9]+:|adaptive mesh refinement|Adaptive mesh refinement|"
-                 r"Proceeding with solve/estimate iteration|Greedy iteration|^\[run_palace\]")
+                 "Proceeding with solve/estimate iteration|Greedy iteration")
 MPI_RE = re.compile(r"Running with (\d+) MPI processes")
 EXCITATION_RE = re.compile(r"(Sweeping|Adding) excitation index \d+ \((\d+)/(\d+)\):")
 FREQUENCY_STEP_RE = re.compile(r"It (\d+)/(\d+):")
@@ -238,19 +233,17 @@ def _palace_processes(processes, exclude_pids=()):
 
 
 def _probe(target):
-    """Is the target reachable, is its run command there (and the shared queue, for a shared target), how much
-    RAM is free, and which Palace processes run there now?"""
+    """Is the target reachable, is its run command there, how much RAM is free, and which Palace processes run
+    there now?"""
     program = target["run_command"].split()[0]
     script = (f'echo "@@program"\ncommand -v {program} || true\n'
-              f'echo "@@shared"\ngrep -l {SHARED_MARK} "$(command -v {program})" 2>/dev/null || true\n'
               # /proc/meminfo, not free: its labels are translated (de: "Speicher:")
               'echo "@@memory"\nawk \'/^MemTotal:/ {t = $2} /^MemAvailable:/ {a = $2} END {print t * 1024, a * 1024}\' '
               '/proc/meminfo\n'
               f'echo "@@processes"\n{PS_COMMAND}\n')
     sections = _sections(_run_script(target, script))
     probe = {"reachable": True, "run_command": program,
-             "run_command_found": any(l.strip() for l in sections.get("program", [])),
-             "shared_queue_found": any(l.strip() for l in sections.get("shared", []))}
+             "run_command_found": any(l.strip() for l in sections.get("program", []))}
     memory = (sections.get("memory") or [""])[0].split()
     if len(memory) == 2 and all(m.isdigit() for m in memory):
         probe["ram_total_gb"], probe["ram_available_gb"] = (round(int(m) / 1e9, 1) for m in memory)
@@ -272,9 +265,7 @@ def list_targets(check=False):
                 entry["check"] = {"reachable": False, "error": str(e)}
         entries.append(entry)
     return {"targets_file": path, "targets": entries,
-            "notes": ["A target with shared = false is for one user: it refuses to start while Palace runs there. "
-                      "A shared simulation server needs gds2palace's run_palace_shared as its run_palace (shared = true): it "
-                      "queues the runs of all users.",
+            "notes": ["A target refuses to start a run while Palace runs there: one run at a time.",
                       "Palace's process count (-np) and container are set in the target's run_palace, not here."]}
 
 
@@ -365,7 +356,7 @@ def submit_simulation(path, target_name="", overwrite=False, show_log=True):
             state = _status(previous)["state"]
         except (OSError, ValueError) as e:
             state = f"unknown ({e})"
-        if state in ("queued", "running"):
+        if state == "running":
             raise ValueError(f"The previous run of this model ({previous['job_id']} on {previous['target']['name']}) "
                              f"is still {state}: see simulation_status. This MCP server never stops a run.")
         if not previous.get("fetched") and previous["target"]["type"] == "ssh" and not overwrite:
@@ -382,15 +373,10 @@ def submit_simulation(path, target_name="", overwrite=False, show_log=True):
         raise OSError(f"'{probe['run_command']}' was not found on target '{target['name']}' (login shell PATH). "
                       "Check run_command in the targets file, or install Palace there (gds2palace installers).")
     running = probe["palace_running"]
-    if target["shared"] and not probe["shared_queue_found"]:
-        raise ValueError(f"Target '{target['name']}' is marked shared, but its {probe['run_command']} is not "
-                         "gds2palace's run_palace_shared, which queues the runs of all users. Ask the simulation server's "
-                         "administrator to install it; until then, runs could overload the machine.")
-    if not target["shared"] and running["processes"]:
+    if running["processes"]:
         raise ValueError(f"Palace is already running on target '{target['name']}' ({running['processes']} "
-                         f"processes, {running['ram_gb']} GB; by user: {running['processes_by_user']}). This "
-                         "target is for one run at a time: wait until it finished, or use another target. (A simulation server "
-                         "shared by several users needs run_palace_shared and shared = true.)")
+                         f"processes, {running['ram_gb']} GB; by user: {running['processes_by_user']}). One run at "
+                         "a time: wait until it finished, or use another target.")
     estimate = _estimate(model)
     warnings = _ram_check(estimate, probe)
 
@@ -432,15 +418,13 @@ def submit_simulation(path, target_name="", overwrite=False, show_log=True):
             log_window = f"none ({e})"
 
     where = f"in {run}" if target["type"] == "local" else f"in {job['remote_dir']} on {target['host']}"
-    notes = (" It waits in the simulation server's queue until a slot is free; simulation_status shows 'queued' meanwhile."
-             if target["shared"] else "")
+    notes = ""
     if previous and previous["target"]["type"] == "ssh" and not previous.get("fetched"):
         notes += (f" The earlier run's folder {previous['remote_dir']} on {previous['target']['host']} was not "
                   "fetched and is not tracked any more; it stays there until the user deletes it.")
     return {"submitted": True, "job_id": job_id, "target": target["name"], "type": target["type"],
-            "shared": target["shared"], "run_dir": run, "remote_dir": job.get("remote_dir"),
+            "run_dir": run, "remote_dir": job.get("remote_dir"),
             "log_window": log_window, "estimate": estimate, "warnings": warnings,
-            "palace_running_on_target": running if target["shared"] else None,
             "note": (f"Palace was started {where}.{notes} Check it with simulation_status (it can take minutes to "
                      "hours); when it finished, fetch_results copies the results back and makes the Touchstone "
                      "files. This MCP server never stops the run; to stop it, the user ends its processes "
@@ -473,12 +457,6 @@ def _progress(mpi_lines, lines):
     return progress
 
 
-def _queue_line(lines):
-    """The last queue line of run_palace_shared, or None."""
-    queue = [line for line in lines if line.startswith((QUEUE_WAITING, QUEUE_GOT))]
-    return queue[-1] if queue else None
-
-
 def _status(job):
     target, folder = job["target"], shlex.quote(_target_dir(job))
     script = (f'cd {folder} 2>/dev/null || {{ echo "@@missing"; exit 0; }}\n'
@@ -505,17 +483,12 @@ def _status(job):
     processes = _processes(sections.get("processes", []))
     marked = {line.strip() for line in sections.get("marked", []) if line.strip().isdigit()}
     own = [p for p in processes if p[0] in marked or (session and p[3] == session)]
-    queue_line = _queue_line(sections.get("progress", []))
     if exit_code:
         state = "finished" if exit_code == "0" else "failed"
         status["exit_code"] = int(exit_code) if exit_code.lstrip("-").isdigit() else exit_code
-    elif own:
-        state = "queued" if queue_line and queue_line.startswith(QUEUE_WAITING) else "running"
     else:
-        state = "stopped"
+        state = "running" if own else "stopped"
     status["state"] = state
-    if queue_line:
-        status["queue"] = queue_line
     if own:
         palace = _palace_processes(own)
         status["palace_processes"], status["palace_ram_gb"] = palace["processes"], palace["ram_gb"]
@@ -531,8 +504,6 @@ def _status(job):
     status["log_tail"] = sections.get("tail", [])
     status["fetched"] = bool(job.get("fetched"))
     status["note"] = {
-        "queued": "Waiting in the shared simulation server's queue for a free slot (see queue). Check again later with "
-                  "simulation_status.",
         "running": "Palace is running. Check again later with simulation_status. This MCP server never stops a run.",
         "finished": "Palace finished: fetch_results " + ("makes the Touchstone files (the results are already here)."
                                                          if target["type"] == "local" else
@@ -610,10 +581,10 @@ def fetch_results(path, include_fields=False, partial=False, delete_remote=False
     state = status["state"]
     if state == "missing":
         raise FileNotFoundError(status["note"])
-    if state in ("queued", "running") and not partial:
+    if state == "running" and not partial:
         raise ValueError(f"The run is still {state}: wait until it finished (simulation_status), or fetch what is "
                          "there so far with partial=True (e.g. finished AMR iterations).")
-    if delete_remote and state in ("queued", "running"):
+    if delete_remote and state == "running":
         raise ValueError("The remote copy of a run that is still going can't be deleted.")
 
     result = {"job_id": job["job_id"], "target": job["target"]["name"], "state": state, "run_dir": job["run_dir"]}
@@ -630,7 +601,7 @@ def fetch_results(path, include_fields=False, partial=False, delete_remote=False
     result["touchstone_files"] = sorted({f for run in summary["runs"] for f in run["touchstone_files"]})
     result["notes"] = summary["notes"]
 
-    if state not in ("queued", "running"):
+    if state != "running":
         job["fetched"] = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
         _write_job(job)
     if job["target"]["type"] == "ssh":

@@ -24,7 +24,6 @@ OPTIONS = {
     "type": (("ssh", "local"), True, str),
     "description": (("ssh", "local"), False, str),
     "run_command": (("ssh", "local"), False, str),
-    "shared": (("ssh", "local"), False, bool),
     "host": (("ssh",), True, str),
     "remote_dir": (("ssh",), False, str),
     "wsl_distro": (("local",), False, str),
@@ -60,7 +59,7 @@ def _check(name, raw):
         raise ValueError(f"Target '{name}' ({kind}) needs {', '.join(missing)}.")
 
     target = {"name": name, "type": kind, "description": raw.get("description", ""),
-              "run_command": raw.get("run_command", DEFAULT_RUN_COMMAND), "shared": raw.get("shared", False)}
+              "run_command": raw.get("run_command", DEFAULT_RUN_COMMAND)}
     if not target["run_command"].strip():
         raise ValueError(f"Target '{name}': run_command is empty.")
     if kind == "ssh":
