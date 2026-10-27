@@ -3,7 +3,26 @@
 Weekly summary of changes to gds2palace_mcp, newest week first. Versions are
 those of the package (`gds2palace_mcp.__version__`).
 
-## Week of 2026-10-26 (0.6.0 to 0.7.0)
+## Week of 2026-10-26 (0.6.0 to 0.8.0)
+
+### Figures of merit for transformers, baluns, couplers and lines (0.8.0, issue #3)
+
+- **New tool `figures_of_merit`:** values at chosen frequencies and min/max (with the worst case)
+  in a band, optional plot. Port roles as in `passive_values`: defaults where the usual numbering is
+  clear, required for couplers; the assistant asks the user if unclear.
+- **Transformer:** L1, L2, k, Q1, Q2, minimum insertion loss (maximum available gain) and the source
+  and load impedances of the simultaneous conjugate match, self-resonance of each winding.
+- **Balun:** insertion loss (power that reaches neither output) and differential insertion loss
+  (-|Sds21|), amplitude and phase imbalance, CMRR, input and differential output return loss.
+- **Coupler / hybrid:** coupling, isolation, directivity, through loss, amplitude balance, phase
+  difference. **Power divider:** split, balance, isolation, return losses.
+- **Line** of known length: Z0, effective permittivity and loss in dB/mm from the ABCD matrix, with
+  the phase unwrapped over frequency (warning when the file has too few points).
+- **Differential** transformers and lines on 4 ports: `pairs`, evaluated on the differential 2-port.
+- Checked on networks with known values (coupled inductors, ideal balun with set imbalance, branch-line
+  hybrid, Wilkinson, lines over 1.3 wavelengths, differential versions built from mixed-mode data), and
+  the optimum impedances against the transducer gain they give. On the D-band balun of the gds2palace
+  study, amplitude and phase imbalance agree with S21/S31 computed directly.
 
 ### Mixed-mode S-parameters and network operations (0.7.0, issue #2)
 

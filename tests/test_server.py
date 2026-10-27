@@ -16,7 +16,7 @@ EXPECTED_TOOLS = {
     "simplify_layout", "suggest_mesh_size", "check_ports", "propose_ports", "add_ports", "check_model_script",
     "generate_model", "wait_for_model", "check_repeated_patterns", "show_in_gmsh", "preview_layout", "summarize_results", "sparameter_summary",
     "plot_sparameters", "show_sparameters", "passive_values", "fit_equivalent_circuit",
-    "list_targets", "submit_simulation", "simulation_status", "fetch_results", "transform_sparameters",
+    "list_targets", "submit_simulation", "simulation_status", "fetch_results", "transform_sparameters", "figures_of_merit",
 }
 
 
