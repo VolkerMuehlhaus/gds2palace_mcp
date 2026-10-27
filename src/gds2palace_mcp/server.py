@@ -14,8 +14,8 @@ from .common import Gds2palaceError, versions
 from .layout import inspect_gds as _inspect_gds
 from .model_run import generate_model as _generate_model
 from .settings_check import check_model_script as _check_model_script
-from . import (circuit, complexity, holes, meshsize, model_run, networks, palace_run, patterns, ports, results,
-               sparams)
+from . import (circuit, complexity, figures, holes, meshsize, model_run, networks, palace_run, patterns, ports,
+               results, sparams)
 from .stackup import inspect_stackup as _inspect_stackup, list_stackups as _list_stackups
 from .viewers import preview_layout as _preview_layout, show_in_gmsh as _show_in_gmsh
 
@@ -46,7 +46,8 @@ runs run_sim on their Linux machine as before.
 For finished Palace runs, summarize_results gives run time, RAM, unknowns and AMR convergence.
 For results (.sNp files): fit_equivalent_circuit makes a SPICE model (snp2le);
 transform_sparameters writes mixed-mode (Sdd, Scc, CMRR), renormalized, terminated or cascaded
-files; sparameter_summary and passive_values give numbers, plot_sparameters
+files; figures_of_merit gives transformer, balun, coupler, power divider and line values;
+sparameter_summary and passive_values give numbers, plot_sparameters
 gives you plots, show_sparameters opens plot windows for the user.
 
 Ask the user for design intent (frequency range, ports, stackup, accuracy versus run time);
@@ -467,6 +468,33 @@ def transform_sparameters(file: str, operation: str, output_file: str = "",
     don't make it clear. output_file: default <name>_<operation>.sNp next to the input."""
     return networks.transform_sparameters(file, operation, output_file, pairs, z0_ohm, terminations, second_file,
                                           frequencies_ghz)
+
+
+@mcp.tool()
+@expected_errors
+def figures_of_merit(file: str, device: str, ports: dict | None = None, pairs: list[list[int]] | None = None,
+                     length_um: float | None = None, frequencies_ghz: list[float] | None = None,
+                     fmin_ghz: float | None = None, fmax_ghz: float | None = None, plot: bool = False) -> list:
+    """Figures of merit of a passive from its Touchstone file: values at frequencies_ghz, and
+    min/max (and the worst case) inside fmin_ghz-fmax_ghz.
+
+    device and ports (port roles; defaults in brackets):
+    - "transformer" {"primary": 1, "secondary": 2}: L1, L2, k, Q1, Q2, maximum available gain /
+      minimum insertion loss, optimum source and load impedance, self-resonances.
+    - "balun" {"input": 1, "outputs": [2, 3]} (positive output first): insertion loss, amplitude
+      and phase imbalance, CMRR, return losses.
+    - "coupler" (input, through, coupled, isolated: no defaults): coupling, isolation, directivity,
+      through loss, amplitude balance, phase difference.
+    - "power_divider" {"input": 1, "outputs": [2, 3]}: split, balance, isolation, return losses.
+    - "line" {"input": 1, "output": 2}, needs length_um: Z0, eps_eff, loss in dB/mm.
+    pairs: for a differential transformer or line on 4 ports, e.g. [[1, 3], [2, 4]] (primary or
+    input pair first, positive port first): evaluated on the differential 2-port.
+
+    Ask the user which port is which if it isn't clear from the layout or the port names.
+    plot: also return a plot of the main values (sent to the assistant)."""
+    result, images = figures.figures_of_merit(file, device, ports, pairs, length_um, frequencies_ghz, fmin_ghz,
+                                              fmax_ghz, plot)
+    return [json.dumps(result, indent=1)] + [Image(data=png, format="png") for png in images]
 
 
 @mcp.tool()
