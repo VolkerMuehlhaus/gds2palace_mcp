@@ -337,8 +337,8 @@ def list_targets(check: bool = False) -> dict:
     their Linux machine as before.
 
     check: also connect to each target: reachable, run command found, RAM, and the Palace processes
-    running there now (counts and user names). A target with shared = true queues runs of several
-    users; a target without it is for one user and refuses to start while Palace runs there."""
+    running there now (counts and user names). A target refuses to start a run while Palace runs
+    there."""
     return palace_run.list_targets(check)
 
 
@@ -357,16 +357,14 @@ def submit_simulation(path: str, target: str = "", overwrite: bool = False, show
     target: a target name from list_targets (may be left empty when only one is configured).
     overwrite: replace the results of an earlier run of this model (ask the user first).
     show_log: open a window on the user's screen that shows the Palace log live.
-    On a shared target the run waits in the simulation server's queue until a slot is free. This MCP server never
-    stops a run; the result says how the user can."""
+    This MCP server never stops a run; the result says how the user can."""
     return palace_run.submit_simulation(path, target, overwrite, show_log)
 
 
 @mcp.tool()
 @expected_errors
 def simulation_status(path: str) -> dict:
-    """State of a run started with submit_simulation: queued (waiting for a slot on a shared simulation server),
-    running, finished, failed or stopped; progress from the Palace log (MPI processes, port n/m,
+    """State of a run started with submit_simulation: running, finished, failed or stopped; progress from the Palace log (MPI processes, port n/m,
     frequency step, AMR iteration), RAM of the run, 'did NOT converge' lines, the last log lines, and
     the Palace processes of others on the target (counts and user names).
     path: the model script or its palace_model/<model>_data folder."""

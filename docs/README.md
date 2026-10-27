@@ -91,7 +91,7 @@ MCP server helps with all three and then builds the model.
 | "Look at the layout. Are the ports at the right place?" | `preview_layout` | The assistant sees a picture of the layout with the ports labelled P1, P2, ... IHP SG13G2 layouts get the KLayout colors; for another technology, give the stackup file, and the colors come from its materials |
 | "Where can I run Palace?" | `list_targets` | The computers you configured for Palace (see [Running Palace](#running-palace)), and whether they are reachable and free |
 | "Run it on the simulation server" | `submit_simulation` | Palace starts on that computer; a terminal window on your screen shows its log live. The assistant tells you the RAM estimate and asks you first |
-| "How far is the simulation?" | `simulation_status` | Queued, running, finished or failed; which port, frequency and AMR iteration Palace is at, its RAM, and the last log lines |
+| "How far is the simulation?" | `simulation_status` | Running, finished or failed; which port, frequency and AMR iteration Palace is at, its RAM, and the last log lines |
 | "Get the results" | `fetch_results` | The results copied back into the model folder, the Touchstone files (`combine_snp`) and the run summary |
 | "Did the Palace run finish, and how long did it take?" | `summarize_results` | Unknowns, mesh size, run time, peak RAM, and for adaptive mesh refinement how much S changed per iteration, for one run or a whole folder of runs |
 | "Show me S11 and S21 of result.s2p" | `show_sparameters` | The plot_snp windows (dB, phase, Smith chart) on your screen |
@@ -124,8 +124,8 @@ are and what they connect, port impedance, which stackup, and how much accuracy 
   computer, as listed in your targets file (see [Running Palace](#running-palace)). Without that file, you run
   `run_sim` on your Linux machine as before, and the MCP server summarizes the results you copy back.
 - **It doesn't stop a Palace run.** To end one, end its processes yourself (`kill` on the simulation server).
-- **It is no batch system.** A simulation server for one user refuses a second run while one is going. A
-  simulation server that several people share needs `run_palace_shared` from gds2palace, which queues all runs (see below).
+- **It is no batch system.** A target refuses a second run while Palace runs there; there is no queue (see
+  [One run at a time](#one-run-at-a-time)).
 - **It doesn't change your original layout.** `simplify_layout` and `add_ports` write a new GDS file next to it. Ports
   are polygons on extra GDS layers (201, 202, ...); `propose_ports` only proposes via ports to ground, so draw
   in-plane and differential ports in KLayout yourself.
@@ -227,7 +227,6 @@ type = "local"
 | `run_command` | all | `"run_palace {config}"` | How Palace starts in the run folder. `{config}` is the config file. The default uses the `run_palace` that the gds2palace installers set up |
 | `remote_dir` | ssh | `"palace_runs/mcp"` | Where the runs go on the simulation server, relative to your home folder |
 | `wsl_distro` | local | the default distribution | The WSL distribution, e.g. `"Ubuntu-24.04"` |
-| `shared` | all | `false` | `true` for a simulation server that several people use (see below) |
 | `description` | all | | A note that the assistant sees, e.g. the size of the machine |
 
 What the targets need:
@@ -324,28 +323,11 @@ More background: [Microsoft: OpenSSH key management](https://learn.microsoft.com
 
 The MCP server never stops a run. If you want to end one, end its processes on the simulation server (`kill`).
 
-### Simulation servers that several people share
+### One run at a time
 
-A target without `shared` is for one person: it refuses to start while any Palace runs on that computer, so that two
-runs never fight for the same cores.
-
-A simulation server that several people use needs a queue that every run goes through, also runs started from setupEM or a
-terminal. gds2palace has one: `run_palace_shared` (in its `scripts` folder). The administrator installs it once as
-the simulation server's `run_palace` and sets how many runs may run at the same time, and with how many processes. Each run then
-waits for a free slot. Mark such a simulation server with `shared = true`:
-
-```toml
-[targets.labserver]
-type = "ssh"
-host = "labserver"
-shared = true
-run_command = "/usr/local/bin/run_palace {config}"
-```
-
-Then the assistant reports a waiting run as "queued", with who is running Palace at the moment (user names and process
-counts only). With `shared = true`, the MCP server checks that the target's `run_palace` really is `run_palace_shared`,
-and refuses otherwise. Give the full path in `run_command`: the gds2palace installer puts a `run_palace` of its own
-into each user's `~/venv/palace/bin`, which would bypass the queue.
+A target refuses to start a run while any Palace runs on that computer, also one started by someone else or from
+setupEM, so that two runs never fight for the same cores. The assistant then tells you how many Palace processes run
+there and whose they are (user names and process counts only).
 
 ## How to start
 

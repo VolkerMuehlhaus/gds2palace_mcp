@@ -40,7 +40,7 @@ run_command = "~/scripts/run_palace {config}"
     path, found = targets.load_targets()
     assert set(found) == {"server", "wsl"}
     assert found["server"] == {"name": "server", "type": "ssh", "description": "16 cores",
-                               "run_command": "run_palace {config}", "shared": False, "host": "hpz2",
+                               "run_command": "run_palace {config}", "host": "hpz2",
                                "remote_dir": "palace_runs/mcp"}
     assert found["wsl"]["wsl_distro"] == "Ubuntu-24.04" and found["wsl"]["run_command"].startswith("~/scripts")
     assert targets.get_target("wsl")["type"] == "local"
@@ -64,7 +64,6 @@ def test_the_only_target_needs_no_name(tmp_path, monkeypatch):
     ('[targets.a]\ntype = "ssh"\nhost = "a b"\n', "not a valid name"),
     ('[targets.a]\ntype = "ssh"\nhost = "h"\nremote_dir = "../x"\n', "relative to the remote home"),
     ('[targets.a]\ntype = "ssh"\nhost = "h"\nremote_dir = "~/x"\n', "relative to the remote home"),
-    ('[targets.a]\ntype = "ssh"\nhost = "h"\nshared = "yes"\n', "shared must be a bool"),
     ('[targets.a]\ntype = "local"\nrun_command = " "\n', "run_command is empty"),
     ('[server]\ntype = "ssh"\n', r"\[targets.<name>\]"),
     ('[targets.a\n', "not valid TOML"),
@@ -129,13 +128,6 @@ def test_progress_starts_again_with_each_amr_iteration_and_port():
     sweep = palace_run._progress([], ["Sweeping excitation index 1 (1/2):",
                                       "It 7/50: ω/2π = 7.000e+00 GHz (total elapsed time = 1.60e+03 s)"])
     assert sweep == {"phase": "frequency sweep", "port": "1/2", "frequency_step": "7/50", "frequency_ghz": 7.0}
-
-
-def test_queue_line_of_the_shared_run_palace():
-    waiting = palace_run.QUEUE_WAITING + ": all 1 slot(s) in use, running: anna (16 processes)"
-    assert palace_run._queue_line(["It 1/2:", waiting]) == waiting
-    assert palace_run._queue_line([waiting, palace_run.QUEUE_GOT + " 1 of 1"]).startswith(palace_run.QUEUE_GOT)
-    assert palace_run._queue_line(["It 1/2:"]) is None
 
 
 def test_ram_check():
@@ -223,9 +215,9 @@ PORT_S = """\
 """
 
 
-def fake_palace(folder, seconds=1, exit_code=0, shared=False):
+def fake_palace(folder, seconds=1, exit_code=0):
     """A run_palace that behaves like Palace: a 'palace-x86_64.bin' process that writes port-S.csv and
-    palace.json to Problem.Output. shared: queues like run_palace_shared (1 slot)."""
+    palace.json to Problem.Output."""
     bin_dir = folder / "fakebin"
     bin_dir.mkdir(parents=True, exist_ok=True)
     palace = bin_dir / "palace-x86_64.bin"
@@ -242,10 +234,7 @@ echo '{{"Problem": {{"DegreesOfFreedom": 1000, "MeshElements": 1}}, "ElapsedTime
 exit {exit_code}
 """, encoding="utf-8", newline="\n")
     run_palace = bin_dir / "run_palace"
-    queue = (f'echo "{palace_run.QUEUE_WAITING}: all 1 slot(s) in use, running: anna (16 processes)"\nsleep 2\n'
-             f'echo "{palace_run.QUEUE_GOT} 1 of 1 (2 MPI processes)"\n') if shared else ""
-    run_palace.write_text(f"#!/bin/bash\n# {palace_run.SHARED_MARK if shared else 'run_palace'}\n{queue}"
-                          f'exec "{palace}" "$1"\n', encoding="utf-8", newline="\n")
+    run_palace.write_text(f'#!/bin/bash\nexec "{palace}" "$1"\n', encoding="utf-8", newline="\n")
     for path in (palace, run_palace):
         path.chmod(0o755)
     return run_palace
@@ -331,32 +320,11 @@ def test_failed_run_and_busy_target(tmp_path, monkeypatch):
     first, second = palace_model(tmp_path / "a"), palace_model(tmp_path / "b")
     palace_run.submit_simulation(str(first), "here", False, False)
     time.sleep(0.5)
-    with pytest.raises(ValueError, match="already running on target 'here'.*one run at a time"):
+    with pytest.raises(ValueError, match="already running on target 'here'.*One run at a time"):
         palace_run.submit_simulation(str(second), "here", False, False)
     wait_for(first / palace_run.EXIT_FILE)
     status = palace_run.simulation_status(str(first))
     assert status["state"] == "failed" and status["exit_code"] == 3 and "log_tail" in status["note"]
-
-
-@needs_linux
-def test_shared_target_queues_and_checks_for_the_shared_run_palace(tmp_path, monkeypatch):
-    plain = fake_palace(tmp_path / "plain", seconds=1)
-    write_targets(tmp_path, monkeypatch, f'[targets.lab]\ntype = "local"\nshared = true\n'
-                                         f'run_command = "{plain} {{config}}"\n')
-    run = palace_model(tmp_path)
-    with pytest.raises(ValueError, match="marked shared.*run_palace_shared"):
-        palace_run.submit_simulation(str(run), "", False, False)
-
-    shared = fake_palace(tmp_path / "shared", seconds=1, shared=True)
-    write_targets(tmp_path, monkeypatch, f'[targets.lab]\ntype = "local"\nshared = true\n'
-                                         f'run_command = "{shared} {{config}}"\n')
-    r = palace_run.submit_simulation(str(run), "", False, False)
-    assert "waits in the simulation server's queue" in r["note"]
-    time.sleep(0.7)
-    status = palace_run.simulation_status(str(run))
-    assert status["state"] == "queued" and "running: anna" in status["queue"]
-    wait_for(run / palace_run.EXIT_FILE)
-    assert palace_run.simulation_status(str(run))["state"] == "finished"
 
 
 @needs_linux
