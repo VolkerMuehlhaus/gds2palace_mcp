@@ -1,6 +1,6 @@
 # gds2palace_mcp
 
-![gds2palace_mcp: agent assisted RFIC EM simulation](docs/png/gds2palace_mcp_banner.png)
+![gds2palace_mcp: same model, your GUI or your agent](docs/png/gds2palace_mcp_release.png)
 
 An [MCP](https://modelcontextprotocol.io) server for
 [gds2palace](https://github.com/VolkerMuehlhaus/gds2palace_ihp_sg13g2). It lets an AI assistant (Claude Code,
