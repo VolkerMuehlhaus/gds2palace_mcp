@@ -10,15 +10,28 @@ from .common import read_stackup
 MAX_SHAPES_FOR_GAPS = 20000
 
 
+def _read_library(gds_file):
+    """The GDSII file as a gdstk library."""
+    import gdstk
+    return gdstk.read_gds(os.path.abspath(gds_file))
+
+
 def _select_cell(library, cellname):
-    """Same choice as gds2palace's read_gds(): the named cell, else the first top-level cell."""
-    if cellname and cellname in library.cells:
-        return library.cells[cellname], None
-    top = library.top_level()
-    if not top:
-        raise ValueError("The GDSII file has no cells.")
-    note = f"Cell '{cellname}' not found, used the first top-level cell." if cellname else None
-    return top[0], note
+    """Same choice as gds2palace's read_gds() (select_design_cell): the named cell, else the design cell, the
+    top-level cell with the largest bounding box, never KLayout's $$$CONTEXT_INFO$$$. Returns (cell, note)."""
+    from gds2palace.util_gds_reader import select_design_cell
+    cell = select_design_cell(library, cellname)
+    note = (f"Cell '{cellname}' not found, used the design cell '{cell.name}' (the largest top-level cell)."
+            if cellname and cell.name != cellname else None)
+    return cell, note
+
+
+def _by_spec(cell):
+    """{(layer, datatype): [point arrays]} of the cell with its hierarchy flattened, paths as polygons."""
+    by_spec = {}
+    for p in cell.get_polygons(include_paths=True):
+        by_spec.setdefault((p.layer, p.datatype), []).append(p.points)
+    return by_spec
 
 
 def _gap_and_width(polygons):
@@ -56,12 +69,10 @@ def _stackup_layer_roles(stackup_file, variable_overrides):
 
 
 def inspect_gds(gds_file, cellname="", stackup_file="", variable_overrides=None):
-    import gdspy
-
     gds_file = os.path.abspath(gds_file)
-    library = gdspy.GdsLibrary(infile=gds_file)
+    library = _read_library(gds_file)
     cell, note = _select_cell(library, cellname)
-    by_spec = cell.get_polygons(by_spec=True)   # flattened hierarchy, keys (layer, datatype)
+    by_spec = _by_spec(cell)   # flattened hierarchy, keys (layer, datatype)
 
     roles = {}
     stackup_path = None

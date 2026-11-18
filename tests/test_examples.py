@@ -5,7 +5,7 @@ import glob
 import json
 import os
 
-import gdspy
+import gdstk
 import pytest
 
 from gds2palace_mcp import complexity, holes, meshsize, model_run, ports, settings_check, sparams
@@ -31,9 +31,9 @@ def test_t582_complexity_matches_the_flattened_count(t582_layouts):
     path = str(t582_layouts / "T582_BEOL_I1_2x300u.gds")
     r = complexity.check_layout_complexity(path, STACKUP)
     assert r["polygons_read_by_gds2palace"] == 53170
-    cell = gdspy.GdsLibrary(infile=path).top_level()[0]
-    flat = sum(len(p) for (l, d), p in cell.get_polygons(by_spec=True).items()
-               if d == 0 and l in {x["layer"] for x in r["layers"]})
+    cell = gdstk.read_gds(path).top_level()[0]
+    read_layers = {x["layer"] for x in r["layers"]}
+    flat = sum(1 for p in cell.get_polygons(include_paths=True) if p.datatype == 0 and p.layer in read_layers)
     assert flat == 53170
     assert r["layers"][0]["layer"] == 66 and any("Via4" in h for h in r["hints"])      # the via arrays dominate
 
@@ -98,17 +98,16 @@ def test_example_scripts_pass_the_port_check(gds2palace_examples, script):
 
 def test_butler_matrix_ports_are_reproduced_from_its_labels(gds2palace_examples, tmp_path):
     source = workflow(gds2palace_examples, "BM_Ardavan_Rahimian_with_ports.gds")
-    library = gdspy.GdsLibrary(infile=source)
+    library = gdstk.read_gds(source)
     cell = library.top_level()[0]
     original = {}
     for p in cell.polygons:
-        layer = int(p.layers[0])
-        if 201 <= layer <= 208:
-            (x0, y0), (x1, y1) = p.polygons[0].min(axis=0), p.polygons[0].max(axis=0)
-            original[round(float(x0), 2), round(float(y0), 2), round(float(x1), 2), round(float(y1), 2)] = layer
-    cell.remove_polygons(lambda pts, layer, datatype: 201 <= layer <= 208)
+        if 201 <= p.layer <= 208:
+            (x0, y0), (x1, y1) = p.points.min(axis=0), p.points.max(axis=0)
+            original[round(float(x0), 2), round(float(y0), 2), round(float(x1), 2), round(float(y1), 2)] = p.layer
+    cell.remove(*[p for p in cell.polygons if 201 <= p.layer <= 208])
     stripped = str(tmp_path / "bm_noports.gds")
-    library.write_gds(stripped)
+    library.write_gds(stripped, max_points=8190)
     r = ports.propose_ports(stripped, STACKUP)
     proposed = {(round(min(p["line"][0], p["line"][2]), 2), round(min(p["line"][1], p["line"][3]), 2),
                  round(max(p["line"][0], p["line"][2]), 2), round(max(p["line"][1], p["line"][3]), 2))

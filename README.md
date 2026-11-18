@@ -38,7 +38,7 @@ full session with an inductor, from the layout to a meshed Palace model, with re
 pip install gds2palace_mcp
 ```
 
-This also installs gds2palace and its requirements (gdspy, gmsh, shapely, numpy), gds_prepare_for_EM, gds_viewer,
+This also installs gds2palace and its requirements (gdstk, gmsh, shapely, numpy), gds_prepare_for_EM, gds_viewer,
 plot_snp and scikit-rf. It needs gds2palace 0.9.2 or newer, which ships the IHP stackup files and the result tools.
 
 Add the MCP server to Claude Code, using the Python environment where it is installed:
