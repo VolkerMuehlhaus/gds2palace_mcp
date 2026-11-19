@@ -114,19 +114,18 @@ def _facing_pairs(geometry, edges, max_dist, min_overlap):
 
 
 def suggest_mesh_size(gds_file, stackup_file, cellname="", variable_overrides=None):
-    import gdspy
     import shapely
     from shapely.geometry import Polygon
 
-    from .layout import _select_cell
+    from .layout import _by_spec, _read_library, _select_cell
 
     gds_file = os.path.abspath(gds_file)
-    library = gdspy.GdsLibrary(infile=gds_file)
+    library = _read_library(gds_file)
     cell, note = _select_cell(library, cellname)
     um = library.unit / 1e-6              # layout units -> microns
 
     _, _, dielectrics_list, metals_list = read_stackup(stackup_file, variable_overrides)
-    by_spec = cell.get_polygons(by_spec=True)
+    by_spec = _by_spec(cell)
     drawn = {int(l) for (l, d), ps in by_spec.items() if int(d) == 0 and len(ps)}
 
     # the top conductor layers that have shapes in this layout

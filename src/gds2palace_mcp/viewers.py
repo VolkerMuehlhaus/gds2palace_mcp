@@ -131,14 +131,13 @@ def preview_layout(gds_file, cellname="", ports=None, width_px=1000, save_png=""
     """
     import io
 
-    import gdspy
     import gds_viewer
 
-    from .layout import _select_cell
+    from .layout import _by_spec, _read_library, _select_cell
 
     gds_file = os.path.abspath(gds_file)
-    cell, note = _select_cell(gdspy.GdsLibrary(infile=gds_file), cellname)
-    by_spec = cell.get_polygons(by_spec=True)
+    cell, note = _select_cell(_read_library(gds_file), cellname)
+    by_spec = _by_spec(cell)
     drawn_layers = {int(layer) for (layer, _), polygons in by_spec.items() if polygons}
 
     if ports:
@@ -179,7 +178,7 @@ def preview_layout(gds_file, cellname="", ports=None, width_px=1000, save_png=""
         notes.append("Colors assume IHP SG13G2 layer numbers. For another technology, pass stackup_file: "
                      "the colors then come from the stackup materials.")
 
-    (x0, y0), (x1, y1) = cell.get_bounding_box()
+    (x0, y0), (x1, y1) = cell.bounding_box()
     summary = {
         "gds_file": gds_file, "cell": cell.name, "style": used_style,
         "bbox": [round(float(v), 4) for v in (x0, y0, x1, y1)],

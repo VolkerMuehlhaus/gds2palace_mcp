@@ -37,12 +37,11 @@ def test_other_technology_gets_stackup_colors_and_a_legend(tmp_path, pcb_stackup
 
 
 def test_layers_with_the_same_material_color_stay_distinguishable(tmp_path, pcb_stackup):
-    import gdspy
-    cell = gdspy.Cell("TWO", exclude_from_current=True)
-    cell.add(gdspy.Rectangle((0, 0), (1000, 500), layer=1))
-    cell.add(gdspy.Rectangle((200, 100), (800, 300), layer=10))
-    library = gdspy.GdsLibrary()
-    library.add(cell)
+    import gdstk
+    library = gdstk.Library()
+    cell = library.new_cell("TWO")
+    cell.add(gdstk.rectangle((0, 0), (1000, 500), layer=1))
+    cell.add(gdstk.rectangle((200, 100), (800, 300), layer=10))
     path = tmp_path / "two.gds"
     library.write_gds(str(path))
     _, summary = viewers.preview_layout(str(path), stackup_file=pcb_stackup)
