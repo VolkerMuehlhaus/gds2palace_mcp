@@ -4,7 +4,7 @@ IHP SG13G2 layer numbers (SG13G2_FEM_200um.xml, bundled with gds2palace): Metal1
 TopVia2 133, TopMetal2 134, SUBGND 250; ports on 201 and up.
 """
 
-import gdspy
+import gdstk
 import numpy as np
 
 STACKUP = "SG13G2_FEM_200um.xml"
@@ -33,14 +33,19 @@ PCB_STACKUP_XML = """<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 
 
 def _write(cell, path):
-    library = gdspy.GdsLibrary()
-    library.add(cell)
+    library = gdstk.Library()
+    library.add(cell, *cell.dependencies(True))
     library.write_gds(str(path))
     return str(path)
 
 
 def _new_cell(name):
-    return gdspy.Cell(name, exclude_from_current=True)
+    return gdstk.Cell(name)
+
+
+def _array(cell, columns, rows, spacing, origin):
+    """An array reference (AREF) of cell."""
+    return gdstk.Reference(cell, origin, columns=columns, rows=rows, spacing=spacing)
 
 
 def line_over_ground(path, width=15.0, length=800.0, port_ref_x=None, ports=True, labels=None):
@@ -49,14 +54,14 @@ def line_over_ground(path, width=15.0, length=800.0, port_ref_x=None, ports=True
     the line. ports=False leaves them out. labels: (left, right) texts on TopMetal2 beside the line ends."""
     cell = _new_cell("LINE")
     x0, x1 = 0.0, length
-    cell.add(gdspy.Rectangle((x0 - 80, -110), (x1 + 80, 110), layer=METAL1))
-    cell.add(gdspy.Rectangle((x0, -width / 2), (x1, width / 2), layer=TOPMETAL2))
+    cell.add(gdstk.rectangle((x0 - 80, -110), (x1 + 80, 110), layer=METAL1))
+    cell.add(gdstk.rectangle((x0, -width / 2), (x1, width / 2), layer=TOPMETAL2))
     if ports:
         px = x0 if port_ref_x is None else port_ref_x
-        cell.add(gdspy.Rectangle((px, -width / 2), (px, width / 2), layer=201))
-        cell.add(gdspy.Rectangle((x1, -width / 2), (x1, width / 2), layer=202))
+        cell.add(gdstk.rectangle((px, -width / 2), (px, width / 2), layer=201))
+        cell.add(gdstk.rectangle((x1, -width / 2), (x1, width / 2), layer=202))
     for text, x in zip(labels or (), (x0 + 5, x1 - 5)):
-        cell.add(gdspy.Label(text, (x, 0), layer=TOPMETAL2, texttype=25))
+        cell.add(gdstk.Label(text, (x, 0), layer=TOPMETAL2, texttype=25))
     return _write(cell, path)
 
 
@@ -64,32 +69,32 @@ def inplane_gap(path, shift_port=0.0):
     """Two TopMetal2 pads with a 10 um gap and an in-plane port rectangle (layer 201) across the gap.
     shift_port moves the port rectangle in y, off the pads."""
     cell = _new_cell("GAP")
-    cell.add(gdspy.Rectangle((0, 0), (100, 20), layer=TOPMETAL2))
-    cell.add(gdspy.Rectangle((110, 0), (210, 20), layer=TOPMETAL2))
-    cell.add(gdspy.Rectangle((100, shift_port), (110, 20 + shift_port), layer=201))
+    cell.add(gdstk.rectangle((0, 0), (100, 20), layer=TOPMETAL2))
+    cell.add(gdstk.rectangle((110, 0), (210, 20), layer=TOPMETAL2))
+    cell.add(gdstk.rectangle((100, shift_port), (110, 20 + shift_port), layer=201))
     return _write(cell, path)
 
 
 def pcb_lines(path, width=500.0, gap=300.0, length=20000.0):
     """Two coupled traces on the PCB 'Top' layer (GDS layer 10), micron units."""
     cell = _new_cell("PCB")
-    cell.add(gdspy.Rectangle((0, 0), (length, width), layer=10))
-    cell.add(gdspy.Rectangle((0, width + gap), (length, 2 * width + gap), layer=10))
+    cell.add(gdstk.rectangle((0, 0), (length, width), layer=10))
+    cell.add(gdstk.rectangle((0, width + gap), (length, 2 * width + gap), layer=10))
     return _write(cell, path)
 
 
 def small_patch(path, size=100.0, layer=10):
     """One short square: no trace and no coupled lines."""
     cell = _new_cell("PATCH")
-    cell.add(gdspy.Rectangle((0, 0), (size, size), layer=layer))
+    cell.add(gdstk.rectangle((0, 0), (size, size), layer=layer))
     return _write(cell, path)
 
 
 def coupled_lines(path, gap=2.0, width=8.0, length=400.0):
     """Two parallel TopMetal2 traces; the layout is as large as the traces are long."""
     cell = _new_cell("COUPLED")
-    cell.add(gdspy.Rectangle((0, 0), (length, width), layer=TOPMETAL2))
-    cell.add(gdspy.Rectangle((0, width + gap), (length, 2 * width + gap), layer=TOPMETAL2))
+    cell.add(gdstk.rectangle((0, 0), (length, width), layer=TOPMETAL2))
+    cell.add(gdstk.rectangle((0, width + gap), (length, 2 * width + gap), layer=TOPMETAL2))
     return _write(cell, path)
 
 
@@ -97,20 +102,17 @@ def via_array(path, columns=10, rows=10, pitch=1.4, size=0.9, hierarchical=True)
     """TopMetal1 and TopMetal2 squares joined by a TopVia2 array; the array is a sub cell reference."""
     side = columns * pitch + 4
     top = _new_cell("VIAS")
-    top.add(gdspy.Rectangle((0, 0), (side, side), layer=TOPMETAL1))
-    top.add(gdspy.Rectangle((0, 0), (side, side), layer=TOPMETAL2))
+    top.add(gdstk.rectangle((0, 0), (side, side), layer=TOPMETAL1))
+    top.add(gdstk.rectangle((0, 0), (side, side), layer=TOPMETAL2))
     via = _new_cell("VIA")
-    via.add(gdspy.Rectangle((0, 0), (size, size), layer=TOPVIA2))
+    via.add(gdstk.rectangle((0, 0), (size, size), layer=TOPVIA2))
     if hierarchical:
-        top.add(gdspy.CellArray(via, columns, rows, (pitch, pitch), origin=(2, 2)))
-        library = gdspy.GdsLibrary()
-        library.add(top)
-        library.add(via)
-        library.write_gds(str(path))
+        top.add(_array(via, columns, rows, (pitch, pitch), (2, 2)))
+        _write(top, path)
     else:
         for i in range(columns):
             for j in range(rows):
-                top.add(gdspy.Rectangle((2 + i * pitch, 2 + j * pitch), (2 + i * pitch + size, 2 + j * pitch + size),
+                top.add(gdstk.rectangle((2 + i * pitch, 2 + j * pitch), (2 + i * pitch + size, 2 + j * pitch + size),
                                         layer=TOPVIA2))
         _write(top, path)
     return str(path)
@@ -121,29 +123,24 @@ def nested_arrays(path, inner=(10, 10), outer=(3, 2), tile_holes=True, fill_data
     BLOCK placed 3 x 2 in TOP (600 vias); and a 20 um Metal1 tile with an 8 um hole placed 8 x 8 edge to edge
     (64 tiles forming a plane). fill_datatype: also 50 Metal1 fill squares on that datatype (e.g. 22)."""
     via = _new_cell("VIA")
-    via.add(gdspy.Rectangle((0, 0), (0.9, 0.9), layer=TOPVIA2))
+    via.add(gdstk.rectangle((0, 0), (0.9, 0.9), layer=TOPVIA2))
     block = _new_cell("BLOCK")
-    block.add(gdspy.Rectangle((0, 0), (16, 16), layer=TOPMETAL1))
-    block.add(gdspy.Rectangle((0, 0), (16, 16), layer=TOPMETAL2))
-    block.add(gdspy.CellArray(via, inner[0], inner[1], (1.4, 1.4), origin=(2, 2)))
+    block.add(gdstk.rectangle((0, 0), (16, 16), layer=TOPMETAL1))
+    block.add(gdstk.rectangle((0, 0), (16, 16), layer=TOPMETAL2))
+    block.add(_array(via, inner[0], inner[1], (1.4, 1.4), (2, 2)))
     tile = _new_cell("TILE")
     if tile_holes:
-        tile.add(gdspy.boolean(gdspy.Rectangle((0, 0), (20, 20)), gdspy.Rectangle((6, 6), (14, 14)), "not", layer=METAL1))
+        tile.add(*gdstk.boolean(gdstk.rectangle((0, 0), (20, 20)), gdstk.rectangle((6, 6), (14, 14)), "not", layer=METAL1))
     else:
-        tile.add(gdspy.Rectangle((0, 0), (20, 20), layer=METAL1))
+        tile.add(gdstk.rectangle((0, 0), (20, 20), layer=METAL1))
     top = _new_cell("TOP")
-    top.add(gdspy.CellArray(block, outer[0], outer[1], (30, 30), origin=(0, 200)))
-    top.add(gdspy.CellArray(tile, 8, 8, (20, 20), origin=(0, 0)))
-    library = gdspy.GdsLibrary()
-    for cell in (top, block, via, tile):
-        library.add(cell)
+    top.add(_array(block, outer[0], outer[1], (30, 30), (0, 200)))
+    top.add(_array(tile, 8, 8, (20, 20), (0, 0)))
     if fill_datatype is not None:
         fill = _new_cell("FILL")
-        fill.add(gdspy.Rectangle((0, 0), (1, 1), layer=METAL1, datatype=fill_datatype))
-        top.add(gdspy.CellArray(fill, 10, 5, (3, 3), origin=(200, 0)))
-        library.add(fill)
-    library.write_gds(str(path))
-    return str(path)
+        fill.add(gdstk.rectangle((0, 0), (1, 1), layer=METAL1, datatype=fill_datatype))
+        top.add(_array(fill, 10, 5, (3, 3), (200, 0)))
+    return _write(top, path)
 
 
 def ground_plane_tiles(path, tiles=10, pitch=20.0, hole=8.0, missing=((3, 3), (3, 4), (4, 3), (4, 4)), slots=25):
@@ -158,15 +155,15 @@ def ground_plane_tiles(path, tiles=10, pitch=20.0, hole=8.0, missing=((3, 3), (3
                 continue
             x, y = i * pitch, j * pitch
             if (i + j) % 2 == 0:
-                cell.add(gdspy.boolean(gdspy.Rectangle((x, y), (x + pitch, y + pitch)),
-                                       gdspy.Rectangle((x + h0, y + h0), (x + h1, y + h1)), "not", layer=METAL1))
+                cell.add(*gdstk.boolean(gdstk.rectangle((x, y), (x + pitch, y + pitch)),
+                                        gdstk.rectangle((x + h0, y + h0), (x + h1, y + h1)), "not", layer=METAL1))
             else:
                 for a, b in [((0, 0), (pitch, h0)), ((0, h1), (pitch, pitch)), ((0, h0), (h0, h1)),
                              ((h1, h0), (pitch, h1))]:
-                    cell.add(gdspy.Rectangle((x + a[0], y + a[1]), (x + b[0], y + b[1]), layer=METAL1))
-    line = gdspy.Rectangle((20, 205), (170, 210))
-    cut = [gdspy.Rectangle((25 + 6 * k, 207), (26 + 6 * k, 208)) for k in range(slots)]
-    cell.add(gdspy.boolean(line, cut, "not", layer=TOPMETAL1))
+                    cell.add(gdstk.rectangle((x + a[0], y + a[1]), (x + b[0], y + b[1]), layer=METAL1))
+    line = gdstk.rectangle((20, 205), (170, 210))
+    cut = [gdstk.rectangle((25 + 6 * k, 207), (26 + 6 * k, 208)) for k in range(slots)]
+    cell.add(*gdstk.boolean(line, cut, "not", layer=TOPMETAL1))
     return _write(cell, path)
 
 

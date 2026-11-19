@@ -18,11 +18,16 @@ PORT_PARAMS = ["portnumber", "voltage", "port_Z0", "source_layernum", "target_la
 # ---------------------------------------------------------------- geometry helpers
 
 def _layout(gds_file, cellname):
-    import gdspy
-    from .layout import _select_cell
-    library = gdspy.GdsLibrary(infile=os.path.abspath(gds_file))
+    """(gdstk library, cell, note) of the layout, the cell chosen as gds2palace's read_gds() chooses it."""
+    from .layout import _read_library, _select_cell
+    library = _read_library(gds_file)
     cell, note = _select_cell(library, cellname)
     return library, cell, note
+
+
+def _by_spec(cell):
+    from .layout import _by_spec as by_spec
+    return by_spec(cell)
 
 
 def _metal(by_spec, layer):
@@ -80,7 +85,7 @@ def check_ports(gds_file, stackup_file, ports, cellname="", variable_overrides=N
     _, _, dielectrics_list, metals_list = read_stackup(stackup_file, variable_overrides)
     library, cell, note = _layout(gds_file, cellname)
     tol = 1e-3 * 1e-6 / library.unit          # 1 nm in layout units
-    by_spec = cell.get_polygons(by_spec=True)
+    by_spec = _by_spec(cell)
     by_name = {m.name: m for m in metals_list.metals}
     stackup_layers = {int(m.layernum) for m in metals_list.metals} | set(dielectrics_list.get_boundary_layers())
     derived_outputs = {d.name for d in metals_list.derived_layers.derived_layers}
@@ -253,7 +258,7 @@ def propose_ports(gds_file, stackup_file, cellname="", variable_overrides=None):
     _, _, dielectrics_list, metals_list = read_stackup(stackup_file, variable_overrides)
     library, cell, note = _layout(gds_file, cellname)
     tol = 1e-3 * 1e-6 / library.unit
-    by_spec = cell.get_polygons(by_spec=True)
+    by_spec = _by_spec(cell)
     drawn = {int(l) for (l, d), ps in by_spec.items() if int(d) == 0 and len(ps)}
     stackup_layers = {int(m.layernum) for m in metals_list.metals} | set(dielectrics_list.get_boundary_layers())
     conductor_layers = {int(m.layernum): m for m in metals_list.metals if m.is_metal}
@@ -296,7 +301,7 @@ def propose_ports(gds_file, stackup_file, cellname="", variable_overrides=None):
             bx1, by1 = p.max(axis=0)
             pin = box(bx0, by0, bx1, by1)
             name = next((lb.text for lb in labels if int(lb.layer) == int(l)
-                         and pin.buffer(tol).contains(Point(lb.position))), None)
+                         and pin.buffer(tol).contains(Point(lb.origin))), None)
             under = [g for g in parts_of(int(l)) if g.intersects(pin)]
             if under and all(is_ground(g) for g in under):
                 skipped.append(f"pin {name or ''} on a ground shape of {conductor_layers[int(l)].name}".replace("  ", " "))
@@ -319,7 +324,7 @@ def propose_ports(gds_file, stackup_file, cellname="", variable_overrides=None):
     candidates = merged + [c for c in candidates if c["source"] != "pin"]
     pinned = [c["bbox"] for c in candidates if c["source"] == "pin"]
     for lb in labels:
-        point = Point(lb.position)
+        point = Point(lb.origin)
         if any(box(*b).buffer(tol).contains(point) for b in pinned):
             continue
         parts = parts_of(int(lb.layer))
@@ -441,7 +446,7 @@ def propose_ports(gds_file, stackup_file, cellname="", variable_overrides=None):
 
 def add_ports(gds_file, ports, output_file="", cellname=""):
     """ports: [{"portnumber": n, "line": [x1, y1, x2, y2], "source_layernum": optional}], zero-width lines."""
-    import gdspy
+    import gdstk
 
     gds_file = os.path.abspath(gds_file)
     if not output_file:
@@ -451,7 +456,7 @@ def add_ports(gds_file, ports, output_file="", cellname=""):
     if os.path.normcase(output_file) == os.path.normcase(gds_file):
         raise ValueError("output_file must differ from gds_file: the original layout is never overwritten.")
     library, cell, note = _layout(gds_file, cellname)
-    used = {int(l) for (l, d) in cell.get_polygons(by_spec=True)}
+    used = {int(l) for (l, d) in _by_spec(cell)}
     written = []
     for port in ports:
         n = int(port["portnumber"])
@@ -462,10 +467,11 @@ def add_ports(gds_file, ports, output_file="", cellname=""):
         xa, ya, xb, yb = (float(v) for v in port["line"])
         if xa != xb and ya != yb:
             raise ValueError(f"Port {n}: a via port line must be horizontal or vertical.")
-        cell.add(gdspy.Rectangle((min(xa, xb), min(ya, yb)), (max(xa, xb), max(ya, yb)), layer=layer, datatype=0))
+        cell.add(gdstk.rectangle((min(xa, xb), min(ya, yb)), (max(xa, xb), max(ya, yb)), layer=layer, datatype=0))
         used.add(layer)
         written.append({"portnumber": n, "source_layernum": layer, "line": [xa, ya, xb, yb]})
-    library.write_gds(output_file)
+    # max_points: gdstk would otherwise split every polygon of the layout with more than 199 vertices
+    library.write_gds(output_file, max_points=8190)
     return {"output_file": output_file, "cell": cell.name, "ports": written,
             "notes": ["The original layout is unchanged. Use output_file as gds_filename, add the add_port lines "
                       "to the script, then run check_ports."] + ([note] if note else [])}

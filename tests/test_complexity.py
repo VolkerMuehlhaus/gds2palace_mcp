@@ -1,6 +1,6 @@
 import hashlib
 
-import gdspy
+import gdstk
 import pytest
 
 import layouts
@@ -13,11 +13,11 @@ def digest(path):
 
 
 def flat_counts(path):
-    cell = gdspy.GdsLibrary(infile=path).top_level()[0]
+    cell = gdstk.read_gds(path).top_level()[0]
     counts = {}
-    for (layer, datatype), polys in cell.get_polygons(by_spec=True).items():
-        if datatype == 0:
-            counts[int(layer)] = counts.get(int(layer), 0) + len(polys)
+    for p in cell.get_polygons(include_paths=True):
+        if p.datatype == 0:
+            counts[p.layer] = counts.get(p.layer, 0) + 1
     return counts
 
 

@@ -3,6 +3,20 @@
 Weekly summary of changes to gds2palace_mcp, newest week first. Versions are
 those of the package (`gds2palace_mcp.__version__`).
 
+## Week of 2026-11-16 (0.9.0)
+
+### gdstk instead of gdspy; the design cell when no cell is named
+
+- **Layouts are read with gdstk** instead of gdspy, like gds2palace 0.11, gds_prepare_for_EM 1.8 and
+  gds_viewer 0.3, which this version needs. gdspy is no longer a dependency of the server; only
+  gds_viewer's own command line still uses it. `add_ports` writes the layout with gdstk, without
+  splitting large polygons.
+- **Without `cellname`, every tool takes the design cell**, the top-level cell with the largest
+  bounding box, never KLayout's `$$$CONTEXT_INFO$$$`: the same cell as gds2palace's `read_gds()`
+  (`select_design_cell`). Before, the first top-level cell, which depends on the file's order.
+- `simplify_layout` gets gds_prepare_for_EM 1.8: merged vias are complete (no strips cut out), and
+  circuit blocks are no longer deleted as seal rings.
+
 ## Week of 2026-10-26 (0.6.0 to 0.8.0)
 
 ### Figures of merit for transformers, baluns, couplers and lines (0.8.0, issue #3)

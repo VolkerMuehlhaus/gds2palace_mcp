@@ -19,7 +19,7 @@ HINT_MIN_POLYGONS = 20
 def _cell_summary(gds_file, cellname):
     from gds_simplify_for_em import open_gds_cell
     library, cell = open_gds_cell(gds_file, cellname)
-    (x0, y0), (x1, y1) = cell.get_bounding_box()
+    (x0, y0), (x1, y1) = cell.bounding_box()
     tops = [c.name for c in library.top_level()]
     return cell.name, tops, (float(x0), float(y0), float(x1), float(y1))
 
@@ -135,10 +135,10 @@ def simplify_layout(gds_file, stackup_file, output_file="", cellname="", remove_
     tops = library.top_level()
 
     def area(c):
-        (x0, y0), (x1, y1) = c.get_bounding_box()
-        return (x1 - x0) * (y1 - y0)
+        box = c.bounding_box()
+        return 0 if box is None else (box[1][0] - box[0][0]) * (box[1][1] - box[0][1])
 
-    main = (library.cells.get(design_name)
+    main = ({c.name: c for c in library.cells}.get(design_name)
             or next((c for c in sorted(tops, key=lambda c: len(c.name)) if c.name.startswith(design_name)), None)
             or max(tops, key=lambda c: (area(c), c.name)))
     after = estimate_polygon_count_by_layer(output_file, main.name, [0])

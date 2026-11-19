@@ -24,12 +24,17 @@ def _placements(library, top):
     plus {cell name: [(columns, rows, (pitch x, pitch y))]} for the arrays that place it."""
     order, seen = [], set()
 
+    import gdstk
+
+    def child_of(ref):
+        return ref.cell if isinstance(ref.cell, gdstk.Cell) else None    # None: cell missing from the file
+
     def visit(cell):                       # post-order: children before parents
         if cell.name in seen:
             return
         seen.add(cell.name)
         for ref in cell.references:
-            child = ref.ref_cell if not isinstance(ref.ref_cell, str) else library.cells.get(ref.ref_cell)
+            child = child_of(ref)
             if child is not None:
                 visit(child)
         order.append(cell)
@@ -40,15 +45,18 @@ def _placements(library, top):
     arrays = {}
     for cell in reversed(order):           # parents first
         for ref in cell.references:
-            child = ref.ref_cell if not isinstance(ref.ref_cell, str) else library.cells.get(ref.ref_cell)
+            child = child_of(ref)
             if child is None:
                 continue
-            n = int(getattr(ref, "columns", 1)) * int(getattr(ref, "rows", 1))
+            repetition = ref.repetition
+            n = max(int(repetition.size), 1)
             count[child.name] += count[cell.name] * n
             if n > 1:
-                spacing = getattr(ref, "spacing", None)
+                # an array (AREF) is a rectangular repetition; other repetitions have no columns/rows
+                columns, rows = (repetition.columns, repetition.rows) if repetition.columns else (n, 1)
+                spacing = repetition.spacing
                 arrays.setdefault(child.name, []).append(
-                    (int(ref.columns), int(ref.rows), tuple(float(v) for v in spacing) if spacing is not None else None))
+                    (int(columns), int(rows), tuple(float(v) for v in spacing) if spacing is not None else None))
     return count, arrays, order
 
 
@@ -73,9 +81,8 @@ def check_repeated_patterns(gds_file, stackup_file, cellname="", mincount=MINCOU
         placed = count[cell.name]
         if not placed:
             continue
-        (cx0, cy0), (cx1, cy1) = cell.get_bounding_box() if cell.get_bounding_box() is not None else ((0, 0), (0, 0))
-        for polyset in cell.polygons:
-            for pts, layer, datatype in zip(polyset.polygons, polyset.layers, polyset.datatypes):
+        for polygon in cell.polygons:
+            for pts, layer, datatype in [(polygon.points, polygon.layer, polygon.datatype)]:
                 layer, datatype = int(layer), int(datatype)
                 if layer not in by_layer:
                     continue
@@ -100,12 +107,12 @@ def check_repeated_patterns(gds_file, stackup_file, cellname="", mincount=MINCOU
         holes = decomp is not None and bool(decomp["holes"])
         # the cell that contributes most, and whether its arrays put the tiles edge to edge
         main_cell = max(c["cells"], key=c["cells"].get)
-        bbox = library.cells[main_cell].get_bounding_box()
+        bbox = next(c for c in cells if c.name == main_cell).bounding_box()
         tiles_touch = None
         for columns, rows, pitch in arrays.get(main_cell, []):
             if pitch is None or bbox is None:
                 continue
-            cw, ch = (bbox[1] - bbox[0])
+            cw, ch = bbox[1][0] - bbox[0][0], bbox[1][1] - bbox[0][1]
             touch_x = columns == 1 or abs(pitch[0] - cw) <= TILE_TOL * cw
             touch_y = rows == 1 or abs(pitch[1] - ch) <= TILE_TOL * ch
             tiles_touch = bool(touch_x and touch_y) if tiles_touch is None else (tiles_touch and touch_x and touch_y)
