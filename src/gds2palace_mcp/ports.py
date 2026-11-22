@@ -46,9 +46,22 @@ def _coverage(line, metal, tol):
     return min(1.0, line.intersection(metal.buffer(tol)).length / line.length)
 
 
+def via_port_is_tube(xmin, ymin, xmax, ymax):
+    """True if gds2palace makes a tube port from this via port shape (gds2palace 0.12.0 and newer: a shape
+    whose short side is more than 10 % of its long side). Always False with an older gds2palace."""
+    try:
+        from gds2palace import simulation_setup
+        return bool(simulation_setup.via_port_is_tube(xmax - xmin, ymax - ymin))
+    except (ImportError, AttributeError):
+        return False
+
+
 def via_port_line(xmin, ymin, xmax, ymax):
-    """The line gds2palace makes from a via port shape: along the longer side, at xmin or ymin."""
+    """The footprint of the port that gds2palace makes from a via port shape: a line along the longer side,
+    at xmin or ymin, or, for a tube port, the outline of the bounding box."""
     from shapely.geometry import LineString
+    if via_port_is_tube(xmin, ymin, xmax, ymax):
+        return LineString([(xmin, ymin), (xmin, ymax), (xmax, ymax), (xmax, ymin), (xmin, ymin)])
     if ymax - ymin > xmax - xmin:
         return LineString([(xmin, ymin), (xmin, ymax)])
     return LineString([(xmin, ymin), (xmax, ymin)])
@@ -172,12 +185,21 @@ def check_ports(gds_file, stackup_file, ports, cellname="", variable_overrides=N
                 continue
             if direction not in ("z", "-z"):
                 errors.append(f"{tag}: a via port needs direction z or -z, not '{direction}'.")
-            if xmax - xmin > 0 and ymax - ymin > 0:
-                info.append(f"{tag}: drawn with an area; gds2palace uses only its "
+            tube = via_port_is_tube(xmin, ymin, xmax, ymax)
+            if tube:
+                entry["tube"] = True
+                info.append(f"{tag}: drawn with an area: gds2palace makes a tube port from it, the four side walls "
+                            "of its bounding box as one multielement port. This is for a port that stands for a "
+                            "conductor with a cross section (e.g. a copper pillar), and combine_snp doesn't "
+                            "de-embed it. For a normal via port, draw a line.")
+            elif xmax - xmin > 0 and ymax - ymin > 0:
+                info.append(f"{tag}: drawn as a narrow box; gds2palace uses only its "
                             f"{'left' if ymax - ymin > xmax - xmin else 'bottom'} edge (xmin/ymin), not the "
                             "center line. Draw via ports as lines.")
             line = via_port_line(xmin, ymin, xmax, ymax)
-            entry["port_line"] = [round(float(v), 4) for v in (*line.coords[0], *line.coords[1])]
+            entry["port_line"] = [round(float(v), 4) for v in (*line.coords[0], *line.coords[-2 if tube else 1])]
+            if tube:
+                entry["port_outline"] = [round(float(v), 4) for v in (xmin, ymin, xmax, ymax)]
             ends = sorted((by_name[n] for n in names), key=lambda m: m.zmin)
             lower, upper = ends
             entry["coverage"] = {}
@@ -204,7 +226,9 @@ def check_ports(gds_file, stackup_file, ports, cellname="", variable_overrides=N
            "warnings": warnings, "info": info, "ports": results,
            "notes": ["Via port: gds2palace turns the shape's bounding box into a line along its longer side, at "
                      "xmin or ymin, and a vertical sheet from the top of the lower metal to the bottom of the "
-                     "upper one: the line must lie on metal of both layers. In-plane port: a rectangle in the "
+                     "upper one: the line must lie on metal of both layers. A shape with an area (short side more "
+                     "than 10 % of the long side, gds2palace 0.12.0 and newer) gives a tube port instead: the four "
+                     "side walls of the bounding box, and its outline must lie on metal of both layers. In-plane port: a rectangle in the "
                      "target metal's plane; current flows along direction, so both ends along it must touch metal."]}
     if note:
         out["notes"].insert(0, note)

@@ -121,3 +121,40 @@ def test_no_candidates_says_so(tmp_path, stackup_name):
     path = layouts.small_patch(tmp_path / "patch.gds", size=20.0, layer=layouts.TOPMETAL2)
     r = ports.propose_ports(path, stackup_name)
     assert r["proposals"] == [] and "ask the user" in " ".join(r["notes"])
+
+
+def box_port_layout(path, box, narrow):
+    """the line over ground with port 1 drawn as a box (x0, y0, x1, y1) and port 2 as a narrow box"""
+    import gdstk
+    lib = gdstk.read_gds(str(layouts.line_over_ground(path, ports=False)))
+    cell = lib.top_level()[0]
+    cell.add(gdstk.rectangle(box[:2], box[2:], layer=201), gdstk.rectangle(narrow[:2], narrow[2:], layer=202))
+    lib.write_gds(str(path))
+    return path
+
+
+def test_via_port_drawn_with_an_area_is_a_tube_port(tmp_path):
+    """gds2palace 0.12.0: a shape with area gives the four side walls of its box, a narrow box still one sheet"""
+    pytest.importorskip("gds2palace")
+    from gds2palace import simulation_setup
+    if not hasattr(simulation_setup, "via_port_is_tube"):
+        pytest.skip("needs gds2palace 0.12.0")
+    path = box_port_layout(tmp_path / "box.gds", box=(2, -6, 14, 6), narrow=(799, -7.5, 800, 7.5))
+    r = check(path, LINE_PORTS)
+    assert r["ok"] and r["warnings"] == []
+    tube, sheet = r["ports"]
+    assert tube["tube"] and tube["port_outline"] == [2, -6, 14, 6] and tube["coverage"] == {"Metal1": 1.0, "TopMetal2": 1.0}
+    assert any("port 1" in i and "tube port" in i for i in r["info"])
+    assert "tube" not in sheet and sheet["port_line"] == [799, -7.5, 799, 7.5]
+    assert any("port 2" in i and "narrow box" in i for i in r["info"])
+
+
+def test_tube_port_partly_off_the_metal_is_reported(tmp_path):
+    pytest.importorskip("gds2palace")
+    from gds2palace import simulation_setup
+    if not hasattr(simulation_setup, "via_port_is_tube"):
+        pytest.skip("needs gds2palace 0.12.0")
+    # the box reaches 12 um beyond the 15 um wide line: part of the tube's outline has no TopMetal2 above it
+    path = box_port_layout(tmp_path / "wide.gds", box=(2, -6, 22, 19.5), narrow=(800, -7.5, 800, 7.5))
+    r = check(path, LINE_PORTS)
+    assert any("port 1" in w and "TopMetal2" in w for w in r["warnings"])
