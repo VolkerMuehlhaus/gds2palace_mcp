@@ -3,7 +3,16 @@
 Weekly summary of changes to gds2palace_mcp, newest week first. Versions are
 those of the package (`gds2palace_mcp.__version__`).
 
-## Week of 2026-11-16 (0.9.0)
+## Week of 2026-11-16 (0.9.0 and 0.9.1)
+
+### Tube ports in the port check (0.9.1)
+
+- **`check_ports` knows tube ports.** gds2palace 0.12.0 builds a via port shape with area (short side more
+  than 10 % of the long side) as the four side walls of its bounding box, one multielement port. The check
+  now reports such a shape as a tube port and checks its outline against both layers, instead of one sheet
+  along the shape's edge. Via ports drawn as lines are checked as before.
+- Needs gds2palace 0.12.0 or newer.
+
 
 ### gdstk instead of gdspy; the design cell when no cell is named
 
